@@ -1,8 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { generateObject } from "ai";
 import { config, SOURCE_FILE_TYPES } from "../config.js";
-import { getModel } from "../llm.js";
+import { getModel, generateObjectWithRetry } from "../llm.js";
 import { FileVerdict, TriageResult, type InventoryReport } from "../models.js";
 import { z } from "zod";
 import type { EmitFn } from "../events.js";
@@ -158,7 +157,7 @@ async function analyzeFile(
   emit?.("file_analyzing", { file: filePath });
 
   const model = getModel(config.triageModel);
-  const result = await generateObject({
+  const result = await generateObjectWithRetry({
     model,
     schema: FileVerdict,
     system: MAP_SYSTEM,
@@ -180,7 +179,7 @@ async function synthesizeTriageResult(
   fileVerdicts: FileVerdict[],
 ): Promise<TriageResult> {
   const model = getModel(config.triageModel);
-  const result = await generateObject({
+  const result = await generateObjectWithRetry({
     model,
     schema: TriageResult,
     system: REDUCE_SYSTEM,
