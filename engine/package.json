@@ -1,0 +1,36 @@
+{
+  "name": "@shadownpm/engine",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^1",
+    "@ai-sdk/openai": "^1",
+    "@ensdomains/content-hash": "^3.0.0",
+    "@hono/node-server": "^1",
+    "@x402/core": "^2.10.0",
+    "@x402/evm": "^2.10.0",
+    "@x402/hono": "^2.10.0",
+    "ai": "^4",
+    "dotenv": "^16",
+    "hono": "^4",
+    "pinata": "^2.5.5",
+    "tar": "^7",
+    "uuid": "https://gateway.pinata.cloud/ipfs/bafkreia7gfsjqaivba243rlfvebawitbqhpb5i44s5ioe5uigono6cm43m",
+    "viem": "^2.47.10",
+    "zod": "^3"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsx": "^4",
+    "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

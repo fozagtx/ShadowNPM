@@ -1,0 +1,9 @@
+{
+  "name": "shadownpm",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix frontend install && npm --prefix frontend run build && npm --prefix engine install",
+    "start": "node --import tsx/esm engine/src/index.ts",
+    "dev": "./run.sh"
+  }
+}
