@@ -51,14 +51,34 @@ async function verifyPaymentTx(txHash: string): Promise<boolean> {
   if (verifiedTxHashes.has(txHash)) return false; // replay protection
 
   try {
-    const receipt = await arcPublicClient.getTransactionReceipt({ hash: txHash as `0x${string}` });
-    if (receipt.status !== "success") return false;
+    // Wait for tx to be mined (retry up to 30s)
+    let receipt;
+    for (let i = 0; i < 15; i++) {
+      try {
+        receipt = await arcPublicClient.getTransactionReceipt({ hash: txHash as `0x${string}` });
+        break;
+      } catch {
+        // tx not mined yet — wait 2s and retry
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    }
+    if (!receipt) {
+      console.log(`[payment] Tx ${txHash} not mined after 30s`);
+      return false;
+    }
+    if (receipt.status !== "success") {
+      console.log(`[payment] Tx ${txHash} reverted`);
+      return false;
+    }
+
+    console.log(`[payment] Tx ${txHash} has ${receipt.logs.length} logs`);
 
     // Check for USDC Transfer event to payee with sufficient amount
     const transferTopic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
-    const payeePadded = `0x000000000000000000000000${config.payeeAddress.slice(2).toLowerCase()}`;
+    const payeePadded = `0x000000000000000000000000${config.payeeAddress!.slice(2).toLowerCase()}`;
 
     for (const log of receipt.logs) {
+      console.log(`[payment] Log: addr=${log.address} topics=${JSON.stringify(log.topics)} data=${log.data}`);
       if (
         log.address.toLowerCase() === ARC_USDC.toLowerCase() &&
         log.topics[0] === transferTopic &&
@@ -67,12 +87,16 @@ async function verifyPaymentTx(txHash: string): Promise<boolean> {
         const amount = BigInt(log.data);
         if (amount >= AUDIT_PRICE_WEI) {
           verifiedTxHashes.add(txHash);
+          console.log(`[payment] Verified! amount=${amount}`);
           return true;
         }
+        console.log(`[payment] Amount too low: ${amount} < ${AUDIT_PRICE_WEI}`);
       }
     }
+    console.log(`[payment] No matching Transfer log found`);
     return false;
-  } catch {
+  } catch (err) {
+    console.error(`[payment] Error verifying tx:`, err);
     return false;
   }
 }
