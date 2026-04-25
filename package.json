@@ -1,0 +1,9 @@
+{
+  "name": "shadownpm",
+  "private": true,
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build && cd ../engine && npm install",
+    "start": "cd engine && npx tsx src/index.ts",
+    "dev": "./run.sh"
+  }
+}
