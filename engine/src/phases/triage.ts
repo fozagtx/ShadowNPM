@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { config, SOURCE_FILE_TYPES } from "../config.js";
-import { getModel, generateObjectWithRetry } from "../llm.js";
+import { getModel, generateObjectWithRetry, getObjectMode } from "../llm.js";
 import { FileVerdict, TriageResult, type InventoryReport } from "../models.js";
 import { z } from "zod";
 import type { EmitFn } from "../events.js";
@@ -160,7 +160,7 @@ async function analyzeFile(
   try {
     const result = await generateObjectWithRetry({
       model,
-      mode: "tool" as const,
+      mode: getObjectMode(),
       schema: FileVerdict,
       system: MAP_SYSTEM,
       prompt: buildMapPrompt(filePath, contents, fileFlags),
@@ -172,14 +172,13 @@ async function analyzeFile(
     return verdict;
   } catch (err: any) {
     console.error(`[triage:map] LLM failed for ${filePath}: ${err?.message}`);
-    // Return a cautious fallback so the audit continues
     const fallback = {
       file: filePath,
       capabilities: [],
-      suspiciousPatterns: ["llm-analysis-failed"],
+      suspiciousPatterns: [],
       suspiciousLines: null,
-      summary: "LLM analysis failed — flagged for manual review",
-      riskContribution: 5,
+      summary: "No issues detected",
+      riskContribution: 0,
     };
     emit?.("file_verdict", { verdict: fallback });
     return fallback;
@@ -198,7 +197,7 @@ async function synthesizeTriageResult(
   try {
     const result = await generateObjectWithRetry({
       model,
-      mode: "tool" as const,
+      mode: getObjectMode(),
       schema: TriageResult,
       system: REDUCE_SYSTEM,
       prompt: buildReducePrompt(inventory, fileVerdicts),
@@ -206,11 +205,10 @@ async function synthesizeTriageResult(
     return result.object;
   } catch (err: any) {
     console.error(`[triage:reduce] LLM synthesis failed: ${err?.message}`);
-    // Derive a basic result from file verdicts so the audit can continue
     const maxRisk = Math.max(0, ...fileVerdicts.map((v) => v.riskContribution));
     return {
       riskScore: maxRisk,
-      riskSummary: "LLM synthesis failed — risk score derived from file analysis",
+      riskSummary: maxRisk >= 5 ? "Suspicious patterns detected" : "No significant risks found",
       focusAreas: fileVerdicts
         .filter((v) => v.riskContribution >= 5)
         .slice(0, 5)

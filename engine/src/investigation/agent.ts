@@ -1,7 +1,7 @@
 import { generateText, tool } from "ai";
 import { z } from "zod";
 import { config } from "../config.js";
-import { getModel, generateObjectWithRetry } from "../llm.js";
+import { getModel, generateObjectWithRetry, getObjectMode } from "../llm.js";
 import { InvestigationOutput, type InvestigationAgentOutput, type InvestigationInput, type ToolCallRecord } from "../models.js";
 import type { AuditLogger } from "../audit-log.js";
 import { SYSTEM_PROMPT, buildUserPrompt } from "./prompt.js";
@@ -193,7 +193,7 @@ export async function runInvestigationAgent(
   try {
     const extraction = await generateObjectWithRetry({
       model,
-      mode: "tool" as const,
+      mode: getObjectMode(),
       schema: InvestigationOutput,
       prompt: extractionPrompt,
     });

@@ -17,6 +17,12 @@ export function getModel(modelName: string) {
   return openai(modelName);
 }
 
+/** Returns the best generateObject mode for the current LLM backend.
+ *  Qwen/OpenAI-compatible models fail with "tool" mode — use "json" instead. */
+export function getObjectMode(): "tool" | "json" {
+  return config.llmBackend === "anthropic" ? "tool" : "json";
+}
+
 /**
  * Wrapper around generateObject that retries on "No object generated" errors.
  * This happens when the model doesn't produce a valid tool call.
