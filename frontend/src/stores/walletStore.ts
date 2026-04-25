@@ -1,11 +1,16 @@
 import { create } from "zustand";
 import { createWalletClient, custom, publicActions } from "viem";
-import type { WalletClient } from "viem";
 import { arcTestnet } from "../lib/arcTestnet";
 
-type ExtendedWalletClient = ReturnType<
-  ReturnType<typeof createWalletClient>["extend"]
->;
+function createExtendedClient(account: `0x${string}`, transport: ReturnType<typeof custom>) {
+  return createWalletClient({
+    account,
+    chain: arcTestnet,
+    transport,
+  }).extend(publicActions);
+}
+
+type ExtendedWalletClient = ReturnType<typeof createExtendedClient>;
 
 let walletClient: ExtendedWalletClient | null = null;
 
@@ -76,11 +81,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
       const address = accounts[0] as `0x${string}`;
 
-      walletClient = createWalletClient({
-        account: address,
-        chain: arcTestnet,
-        transport: custom(ethereum),
-      }).extend(publicActions);
+      walletClient = createExtendedClient(address, custom(ethereum));
 
       set({ address, isConnecting: false });
 
@@ -91,11 +92,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
           get().disconnect();
         } else {
           const newAddr = newAccs[0] as `0x${string}`;
-          walletClient = createWalletClient({
-            account: newAddr,
-            chain: arcTestnet,
-            transport: custom(ethereum),
-          }).extend(publicActions);
+          walletClient = createExtendedClient(newAddr, custom(ethereum));
           set({ address: newAddr });
         }
       };
