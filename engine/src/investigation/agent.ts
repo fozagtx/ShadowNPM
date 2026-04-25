@@ -189,21 +189,29 @@ export async function runInvestigationAgent(
 
   log?.writeLog("extraction_prompt.md", extractionPrompt);
 
-  const extraction = await generateObjectWithRetry({
-    model,
-    schema: InvestigationOutput,
-    prompt: extractionPrompt,
-  });
+  let extractionResult: any;
+  try {
+    const extraction = await generateObjectWithRetry({
+      model,
+      mode: "tool" as const,
+      schema: InvestigationOutput,
+      prompt: extractionPrompt,
+    });
+    extractionResult = extraction.object;
+  } catch (err: any) {
+    console.error(`[agent] extraction failed: ${err?.message} — returning empty findings`);
+    extractionResult = { capabilities: [], findings: [], proofs: [] };
+  }
 
-  console.log(`[agent] extraction complete — ${extraction.object.findings.length} findings`);
-  for (const f of extraction.object.findings) {
+  console.log(`[agent] extraction complete — ${extractionResult.findings.length} findings`);
+  for (const f of extractionResult.findings) {
     console.log(`[agent]   [${f.confidence}] ${f.capability} @ ${f.fileLine}: ${f.problem.slice(0, 120)}`);
   }
 
-  log?.writeLog("extraction_result.json", extraction.object);
+  log?.writeLog("extraction_result.json", extractionResult);
 
   return {
-    ...extraction.object,
+    ...extractionResult,
     toolCalls: toolCallRecords,
     agentText: result.text,
   };

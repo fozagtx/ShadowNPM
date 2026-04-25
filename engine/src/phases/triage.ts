@@ -157,17 +157,33 @@ async function analyzeFile(
   emit?.("file_analyzing", { file: filePath });
 
   const model = getModel(config.triageModel);
-  const result = await generateObjectWithRetry({
-    model,
-    schema: FileVerdict,
-    system: MAP_SYSTEM,
-    prompt: buildMapPrompt(filePath, contents, fileFlags),
-  });
+  try {
+    const result = await generateObjectWithRetry({
+      model,
+      mode: "tool" as const,
+      schema: FileVerdict,
+      system: MAP_SYSTEM,
+      prompt: buildMapPrompt(filePath, contents, fileFlags),
+    });
 
-  const verdict = { ...result.object, file: filePath };
-  console.log(`[triage:map] ${filePath} → risk=${verdict.riskContribution}/10 caps=[${verdict.capabilities.join(", ")}] suspicious=[${verdict.suspiciousPatterns.join("; ")}]`);
-  emit?.("file_verdict", { verdict });
-  return verdict;
+    const verdict = { ...result.object, file: filePath };
+    console.log(`[triage:map] ${filePath} → risk=${verdict.riskContribution}/10 caps=[${verdict.capabilities.join(", ")}] suspicious=[${verdict.suspiciousPatterns.join("; ")}]`);
+    emit?.("file_verdict", { verdict });
+    return verdict;
+  } catch (err: any) {
+    console.error(`[triage:map] LLM failed for ${filePath}: ${err?.message}`);
+    // Return a cautious fallback so the audit continues
+    const fallback = {
+      file: filePath,
+      capabilities: [],
+      suspiciousPatterns: ["llm-analysis-failed"],
+      suspiciousLines: null,
+      summary: "LLM analysis failed — flagged for manual review",
+      riskContribution: 5,
+    };
+    emit?.("file_verdict", { verdict: fallback });
+    return fallback;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -179,13 +195,28 @@ async function synthesizeTriageResult(
   fileVerdicts: FileVerdict[],
 ): Promise<TriageResult> {
   const model = getModel(config.triageModel);
-  const result = await generateObjectWithRetry({
-    model,
-    schema: TriageResult,
-    system: REDUCE_SYSTEM,
-    prompt: buildReducePrompt(inventory, fileVerdicts),
-  });
-  return result.object;
+  try {
+    const result = await generateObjectWithRetry({
+      model,
+      mode: "tool" as const,
+      schema: TriageResult,
+      system: REDUCE_SYSTEM,
+      prompt: buildReducePrompt(inventory, fileVerdicts),
+    });
+    return result.object;
+  } catch (err: any) {
+    console.error(`[triage:reduce] LLM synthesis failed: ${err?.message}`);
+    // Derive a basic result from file verdicts so the audit can continue
+    const maxRisk = Math.max(0, ...fileVerdicts.map((v) => v.riskContribution));
+    return {
+      riskScore: maxRisk,
+      riskSummary: "LLM synthesis failed — risk score derived from file analysis",
+      focusAreas: fileVerdicts
+        .filter((v) => v.riskContribution >= 5)
+        .slice(0, 5)
+        .map((v) => ({ file: v.file, lines: null, reason: v.summary })),
+    };
+  }
 }
 
 // ---------------------------------------------------------------------------
