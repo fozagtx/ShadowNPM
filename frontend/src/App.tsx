@@ -15,7 +15,8 @@ function App() {
   const reset = useAuditStore((s) => s.reset);
   const walletAddress = useWalletStore((s) => s.address);
 
-  const hasAudit = isRunning || verdict;
+  const auditError = useAuditStore((s) => s.error);
+  const hasAudit = isRunning || verdict || (!!auditId && !!auditError);
   const isConnected = !!walletAddress;
 
   // On mount: reconnect to active session from URL or sessionStorage

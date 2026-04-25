@@ -102,17 +102,37 @@ export function Dashboard() {
       </form>
 
       {error && (
-        <p
+        <div
           style={{
             fontFamily: "var(--font-mono)",
-            fontSize: "0.75rem",
+            fontSize: "0.85rem",
             color: "var(--danger)",
-            maxWidth: 400,
+            maxWidth: 440,
             textAlign: "center",
+            background: "rgba(255,60,60,0.08)",
+            border: "1px solid var(--danger)",
+            borderRadius: "var(--radius)",
+            padding: "14px 20px",
           }}
         >
-          {error}
-        </p>
+          <p style={{ marginBottom: 8 }}>{error}</p>
+          <button
+            onClick={() => { if (input.trim()) startAudit(input.trim()); }}
+            style={{
+              padding: "6px 16px",
+              border: "1px solid var(--danger)",
+              borderRadius: "var(--radius)",
+              background: "none",
+              color: "var(--danger)",
+              fontWeight: 600,
+              fontSize: "0.75rem",
+              cursor: "pointer",
+              fontFamily: "var(--font-mono)",
+            }}
+          >
+            Retry
+          </button>
+        </div>
       )}
 
       {paymentTxHash && (
