@@ -12,7 +12,7 @@ import { x402ResourceServer } from "@x402/core/server";
 import { ExactEvmScheme as ExactEvmServerScheme } from "@x402/evm/exact/server";
 import { x402Facilitator } from "@x402/core/facilitator";
 import { ExactEvmScheme as ExactEvmFacilitatorScheme } from "@x402/evm/exact/facilitator";
-import { toFacilitatorEvmSigner } from "@x402/evm";
+
 import { createWalletClient, http, defineChain, publicActions } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
@@ -60,8 +60,12 @@ if (config.payeeAddress && process.env.SHADOWNPM_PRIVATE_KEY) {
     transport: http(),
   }).extend(publicActions);
 
-  // Wrap wallet client with toFacilitatorEvmSigner (adds getAddresses())
-  const facilitatorSigner = toFacilitatorEvmSigner(walletClient as any);
+  // Build facilitator signer manually — toFacilitatorEvmSigner reads .address
+  // but viem puts it at .account.address
+  const facilitatorSigner = Object.assign(Object.create(walletClient), walletClient, {
+    address: account.address,
+    getAddresses: () => [account.address],
+  });
 
   const facilitator = new x402Facilitator();
   facilitator.register(
