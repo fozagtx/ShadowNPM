@@ -55,7 +55,7 @@ function App() {
       <Header />
       <main className={`flex-1 flex flex-col ${hasAudit ? "min-h-0 overflow-hidden" : ""}`}>
         {hasAudit ? <AuditView /> : <Landing />}
-        {error && !hasAudit && (
+        {error && (
           <div
             style={{
               position: "fixed",

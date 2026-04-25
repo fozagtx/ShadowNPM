@@ -191,25 +191,28 @@ export const useAuditStore = create<AuditState>((set, get) => ({
 
     // Handle x402 payment
     if (res.status === 402) {
-      const walletStore = useWalletStore.getState();
-
+      console.log("[x402] Got 402, starting payment flow...");
       // Connect wallet if needed
-      if (!walletStore.address) {
+      if (!useWalletStore.getState().address) {
         if (!(window as any).ethereum) {
           set({ isRunning: false, error: "Install MetaMask to pay for audits" });
           return;
         }
         set({ paymentStatus: "wallet-connecting" });
-        await walletStore.connect();
-        if (!walletStore.address) {
-          set({ isRunning: false, paymentStatus: null, error: walletStore.error || "Wallet connection failed" });
+        await useWalletStore.getState().connect();
+        // Re-read state after async connect
+        const updated = useWalletStore.getState();
+        if (!updated.address) {
+          set({ isRunning: false, paymentStatus: null, error: updated.error || "Wallet connection failed" });
           return;
         }
       }
 
       // Sign payment
+      console.log("[x402] Wallet connected, signing payment...");
       set({ paymentStatus: "signing" });
-      const signer = walletStore.getSigner();
+      const signer = useWalletStore.getState().getSigner();
+      console.log("[x402] Signer:", signer ? `account=${signer.account?.address}` : "null");
       if (!signer) {
         set({ isRunning: false, paymentStatus: null, error: "Wallet not available" });
         return;
@@ -219,6 +222,7 @@ export const useAuditStore = create<AuditState>((set, get) => ({
       try {
         paymentHeaders = await createPaymentHeaders(res, signer);
       } catch (err: any) {
+        console.error("[x402] Payment signing failed:", err);
         set({ isRunning: false, paymentStatus: null, error: err?.message || "Payment signing failed" });
         return;
       }
