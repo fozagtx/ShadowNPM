@@ -7,6 +7,8 @@ import { z } from "zod";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+import { createPublicClient, http, defineChain, parseAbi } from "viem";
+
 import { config } from "./config.js";
 import { runAudit } from "./pipeline.js";
 import { publishAuditResults } from "./publish.js";
@@ -19,13 +21,64 @@ const app = new Hono();
 app.use("/*", cors({ origin: "*" }));
 
 // ---------------------------------------------------------------------------
-// Payment config
+// Payment config — simple USDC transfer verification on Arc testnet
 // ---------------------------------------------------------------------------
 
 const PAYMENT_ENABLED = !!config.payeeAddress;
+const ARC_CHAIN_ID = 5042002;
+const ARC_USDC = "0x3600000000000000000000000000000000000000" as const;
+const ARC_USDC_DECIMALS = 18;
+// $0.001 = 0.001 * 10^18 = 1e15
+const AUDIT_PRICE_WEI = BigInt(1e15);
+
+const arcTestnet = defineChain({
+  id: ARC_CHAIN_ID,
+  name: "Arc Testnet",
+  nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
+  rpcUrls: { default: { http: ["https://rpc.testnet.arc.network"] } },
+  testnet: true,
+});
+
+const arcPublicClient = PAYMENT_ENABLED
+  ? createPublicClient({ chain: arcTestnet, transport: http() })
+  : null;
+
+// Track verified tx hashes to prevent replay
+const verifiedTxHashes = new Set<string>();
+
+async function verifyPaymentTx(txHash: string): Promise<boolean> {
+  if (!arcPublicClient || !config.payeeAddress) return false;
+  if (verifiedTxHashes.has(txHash)) return false; // replay protection
+
+  try {
+    const receipt = await arcPublicClient.getTransactionReceipt({ hash: txHash as `0x${string}` });
+    if (receipt.status !== "success") return false;
+
+    // Check for USDC Transfer event to payee with sufficient amount
+    const transferTopic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+    const payeePadded = `0x000000000000000000000000${config.payeeAddress.slice(2).toLowerCase()}`;
+
+    for (const log of receipt.logs) {
+      if (
+        log.address.toLowerCase() === ARC_USDC.toLowerCase() &&
+        log.topics[0] === transferTopic &&
+        log.topics[2]?.toLowerCase() === payeePadded
+      ) {
+        const amount = BigInt(log.data);
+        if (amount >= AUDIT_PRICE_WEI) {
+          verifiedTxHashes.add(txHash);
+          return true;
+        }
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
 
 if (PAYMENT_ENABLED) {
-  console.log(`[payment] Audits cost ${config.auditPriceUsd} USDC on Arc testnet`);
+  console.log(`[payment] Audits cost $0.001 USDC on Arc testnet`);
   console.log(`[payment] Payee: ${config.payeeAddress}`);
 } else {
   console.log("[payment] No SHADOWNPM_PAYEE_ADDRESS set — audits are free");
@@ -87,6 +140,72 @@ function enqueueAudit(packageName: string, version?: string): Promise<any> {
 }
 
 // ---------------------------------------------------------------------------
+// GET /payment-info — tells frontend what to pay
+// ---------------------------------------------------------------------------
+
+app.get("/payment-info", (c) => {
+  if (!PAYMENT_ENABLED) {
+    return c.json({ required: false });
+  }
+  return c.json({
+    required: true,
+    chainId: ARC_CHAIN_ID,
+    token: ARC_USDC,
+    decimals: ARC_USDC_DECIMALS,
+    amount: AUDIT_PRICE_WEI.toString(),
+    payTo: config.payeeAddress,
+    rpc: "https://rpc.testnet.arc.network",
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /verify-payment — verifies a tx hash, returns a one-time token
+// ---------------------------------------------------------------------------
+
+const paymentTokens = new Map<string, number>(); // token -> expiry timestamp
+
+app.post("/verify-payment", async (c) => {
+  if (!PAYMENT_ENABLED) {
+    // No payment needed — return a free token
+    const token = crypto.randomUUID();
+    paymentTokens.set(token, Date.now() + 5 * 60 * 1000);
+    return c.json({ verified: true, token });
+  }
+
+  let body: any;
+  try { body = await c.req.json(); } catch {
+    return c.json({ error: "Invalid JSON" }, 400);
+  }
+
+  const txHash = body?.txHash;
+  if (!txHash || typeof txHash !== "string") {
+    return c.json({ error: "txHash required" }, 400);
+  }
+
+  const valid = await verifyPaymentTx(txHash);
+  if (!valid) {
+    return c.json({ error: "Payment not verified. Check tx hash and try again." }, 400);
+  }
+
+  const token = crypto.randomUUID();
+  paymentTokens.set(token, Date.now() + 5 * 60 * 1000); // 5 min expiry
+  console.log(`[payment] Verified tx ${txHash}`);
+  return c.json({ verified: true, token });
+});
+
+function consumePaymentToken(token: string | null | undefined): boolean {
+  if (!PAYMENT_ENABLED) return true;
+  if (!token) return false;
+  const expiry = paymentTokens.get(token);
+  if (!expiry || Date.now() > expiry) {
+    paymentTokens.delete(token!);
+    return false;
+  }
+  paymentTokens.delete(token);
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // POST /audit — sync, waits for result
 // ---------------------------------------------------------------------------
 
@@ -129,6 +248,12 @@ app.post("/audit/stream", async (c) => {
   const parsed = AuditRequest.safeParse(body);
   if (!parsed.success) {
     return c.json({ error: "Invalid request", details: parsed.error.format() }, 400);
+  }
+
+  // Verify payment token
+  const paymentToken = (body as any)?.paymentToken;
+  if (!consumePaymentToken(paymentToken)) {
+    return c.json({ error: "Payment required. Complete payment first." }, 403);
   }
 
   const session = createSession(parsed.data.packageName);

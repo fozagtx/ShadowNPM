@@ -13,6 +13,8 @@ import type {
   InventoryMeta,
 } from "../lib/types";
 import { PHASE_ORDER, PHASE_LABELS } from "../lib/types";
+import { useWalletStore } from "./walletStore";
+import { sendUsdcPayment } from "../lib/payment";
 
 const API_BASE = import.meta.env.DEV ? "/api" : "";
 
@@ -58,8 +60,8 @@ interface AuditState {
   autoFollow: boolean;
   error: string | null;
 
-  // Payment state (kept for UI compatibility)
-  paymentStatus: null;
+  // Payment state
+  paymentStatus: "sending" | "verifying" | null;
 
   // Animation state
   agentThinking: boolean;
@@ -170,12 +172,74 @@ export const useAuditStore = create<AuditState>((set, get) => ({
     get().reset();
     set({ packageName, isRunning: true });
 
+    // Step 1: Get payment info
+    let paymentInfo: any;
+    try {
+      const infoRes = await fetch(`${API_BASE}/payment-info`);
+      paymentInfo = await infoRes.json();
+    } catch {
+      set({ isRunning: false, error: "Failed to connect to engine" });
+      return;
+    }
+
+    // Step 2: If payment required, send USDC via MetaMask
+    let paymentToken: string | undefined;
+    if (paymentInfo.required) {
+      const signer = useWalletStore.getState().getSigner();
+      if (!signer) {
+        set({ isRunning: false, error: "Wallet not connected" });
+        return;
+      }
+
+      set({ paymentStatus: "sending" });
+      let txHash: string;
+      try {
+        txHash = await sendUsdcPayment(signer, paymentInfo);
+      } catch (err: any) {
+        set({ isRunning: false, paymentStatus: null, error: err?.message || "Payment failed" });
+        return;
+      }
+
+      // Step 3: Verify payment on engine
+      set({ paymentStatus: "verifying" });
+      try {
+        const verifyRes = await fetch(`${API_BASE}/verify-payment`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ txHash }),
+        });
+        const verifyBody = await verifyRes.json();
+        if (!verifyBody.verified) {
+          set({ isRunning: false, paymentStatus: null, error: verifyBody.error || "Payment verification failed" });
+          return;
+        }
+        paymentToken = verifyBody.token;
+      } catch {
+        set({ isRunning: false, paymentStatus: null, error: "Payment verification failed" });
+        return;
+      }
+    } else {
+      // Free mode — get a free token
+      try {
+        const verifyRes = await fetch(`${API_BASE}/verify-payment`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        const verifyBody = await verifyRes.json();
+        paymentToken = verifyBody.token;
+      } catch { /* proceed without token */ }
+    }
+
+    set({ paymentStatus: null });
+
+    // Step 4: Start audit with payment token
     let res: Response;
     try {
       res = await fetch(`${API_BASE}/audit/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ packageName, ...(version && { version }) }),
+        body: JSON.stringify({ packageName, ...(version && { version }), paymentToken }),
       });
     } catch {
       set({ isRunning: false, error: "Failed to connect to audit engine" });
