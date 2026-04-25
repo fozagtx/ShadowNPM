@@ -118,7 +118,8 @@ if (config.payeeAddress && process.env.SHADOWNPM_PRIVATE_KEY) {
 
   app.use(x402mw);
 
-  console.log(`[x402] Payment enabled: ${config.auditPriceUsd} USDC per audit on Arc testnet → ${config.payeeAddress}`);
+  console.log(`[x402] Payment enabled: ${config.auditPriceUsd} USDC per audit on Arc testnet`);
+  console.log(`[x402] Payee: ${config.payeeAddress}`);
   console.log(`[x402] Self-hosted facilitator with signer ${account.address}`);
 } else if (config.payeeAddress) {
   console.log("[x402] SHADOWNPM_PAYEE_ADDRESS set but SHADOWNPM_PRIVATE_KEY missing — audits are free");
