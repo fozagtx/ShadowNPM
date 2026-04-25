@@ -1,6 +1,5 @@
 import { x402Client, x402HTTPClient } from "@x402/core/client";
 import { registerExactEvmScheme } from "@x402/evm/exact/client";
-import { toClientEvmSigner } from "@x402/evm";
 
 /**
  * Given a 402 response and a viem WalletClient (with publicActions),
@@ -21,8 +20,14 @@ export async function createPaymentHeaders(
     throw new Error("Server returned 402 but payment is not configured. Try again later.");
   }
 
-  // Wrap viem wallet client into x402-compatible signer (sets .address correctly)
-  const signer = toClientEvmSigner(walletClient);
+  // Build x402-compatible signer manually — viem puts address at .account.address
+  // but x402 expects it at .address
+  const signer = {
+    address: walletClient.account?.address ?? walletClient.address,
+    signTypedData: (msg: any) => walletClient.signTypedData(msg),
+    readContract: walletClient.readContract?.bind(walletClient),
+    getTransactionCount: walletClient.getTransactionCount?.bind(walletClient),
+  };
 
   const client = new x402Client();
   registerExactEvmScheme(client, { signer });
