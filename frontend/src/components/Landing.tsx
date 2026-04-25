@@ -1,26 +1,11 @@
-import { useState } from "react";
-import { useAuditStore } from "../stores/auditStore";
 import { useWalletStore } from "../stores/walletStore";
 import { HeroAnimation } from "./HeroAnimation";
 import { ArcLogo } from "./ArcLogo";
 
 export function Landing() {
-  const startAudit = useAuditStore((s) => s.startAudit);
-  const paymentStatus = useAuditStore((s) => s.paymentStatus);
-  const walletAddress = useWalletStore((s) => s.address);
   const walletConnect = useWalletStore((s) => s.connect);
   const walletConnecting = useWalletStore((s) => s.isConnecting);
   const walletError = useWalletStore((s) => s.error);
-
-  const [input, setInput] = useState("");
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim()) return;
-    startAudit(input.trim());
-  };
-
-  const isConnected = !!walletAddress;
 
   return (
     <div
@@ -49,31 +34,28 @@ export function Landing() {
         <ArcLogo size={18} style={{ verticalAlign: "-3px" }} />
       </p>
 
-      {/* Step 1: Connect Wallet */}
-      {!isConnected && (
-        <button
-          onClick={walletConnect}
-          disabled={walletConnecting}
-          style={{
-            padding: "12px 32px",
-            border: "none",
-            borderRadius: "var(--radius)",
-            background: "var(--arc-blue)",
-            color: "#fff",
-            fontWeight: 600,
-            fontSize: "0.9rem",
-            cursor: walletConnecting ? "wait" : "pointer",
-            letterSpacing: "0.02em",
-            fontFamily: "var(--font-mono)",
-            opacity: walletConnecting ? 0.6 : 1,
-            marginTop: 8,
-          }}
-        >
-          {walletConnecting ? "Connecting..." : "Connect Wallet to Start"}
-        </button>
-      )}
+      <button
+        onClick={walletConnect}
+        disabled={walletConnecting}
+        style={{
+          padding: "12px 32px",
+          border: "none",
+          borderRadius: "var(--radius)",
+          background: "var(--arc-blue)",
+          color: "#fff",
+          fontWeight: 600,
+          fontSize: "0.9rem",
+          cursor: walletConnecting ? "wait" : "pointer",
+          letterSpacing: "0.02em",
+          fontFamily: "var(--font-mono)",
+          opacity: walletConnecting ? 0.6 : 1,
+          marginTop: 8,
+        }}
+      >
+        {walletConnecting ? "Connecting..." : "Connect Wallet"}
+      </button>
 
-      {walletError && !isConnected && (
+      {walletError && (
         <p
           style={{
             fontFamily: "var(--font-mono)",
@@ -85,59 +67,6 @@ export function Landing() {
         </p>
       )}
 
-      {/* Step 2: Enter package name (only after wallet connected) */}
-      {isConnected && (
-        <form
-          onSubmit={handleSubmit}
-          className="flex items-center gap-2"
-          style={{ marginTop: 8 }}
-        >
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="package name (e.g. lodash)"
-            autoFocus
-            style={{
-              background: "var(--bg-secondary)",
-              border: "1px solid var(--border-strong)",
-              borderRadius: "var(--radius)",
-              padding: "10px 16px",
-              fontFamily: "var(--font-mono)",
-              fontSize: "0.9rem",
-              color: "var(--text)",
-              width: 280,
-              outline: "none",
-            }}
-          />
-          <button
-            type="submit"
-            disabled={!input.trim() || !!paymentStatus}
-            className="disabled:opacity-30 disabled:cursor-not-allowed"
-            style={{
-              padding: "10px 20px",
-              border: "none",
-              borderRadius: "var(--radius)",
-              background: "var(--accent)",
-              color: "#fff",
-              fontWeight: 600,
-              fontSize: "0.85rem",
-              cursor: "pointer",
-              letterSpacing: "0.02em",
-              whiteSpace: "nowrap",
-              fontFamily: "var(--font-mono)",
-            }}
-          >
-            {paymentStatus === "signing"
-              ? "Sign in wallet..."
-              : paymentStatus === "retrying"
-                ? "Processing..."
-                : "Pay & Audit"}
-          </button>
-        </form>
-      )}
-
-      {/* Hero terminal animation */}
       <HeroAnimation />
 
       <p
