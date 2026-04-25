@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useAuditStore } from "../stores/auditStore";
 import { useWalletStore } from "../stores/walletStore";
 import { PhaseProgress } from "./PhaseProgress";
@@ -9,7 +8,6 @@ export function Header() {
   const packageName = useAuditStore((s) => s.packageName);
   const verdict = useAuditStore((s) => s.verdict);
   const reset = useAuditStore((s) => s.reset);
-  const startAudit = useAuditStore((s) => s.startAudit);
   const paymentStatus = useAuditStore((s) => s.paymentStatus);
   const walletAddress = useWalletStore((s) => s.address);
   const walletConnect = useWalletStore((s) => s.connect);
@@ -17,7 +15,6 @@ export function Header() {
   const walletConnecting = useWalletStore((s) => s.isConnecting);
   const walletError = useWalletStore((s) => s.error);
 
-  const [input, setInput] = useState("");
   const hasAudit = isRunning || verdict;
 
   const statusColor = verdict
@@ -29,14 +26,6 @@ export function Header() {
   const goHome = () => {
     reset();
     history.pushState(null, "", "/");
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (input.trim()) {
-      startAudit(input.trim());
-      setInput("");
-    }
   };
 
   return (
@@ -84,50 +73,7 @@ export function Header() {
         Testnet
       </span>
 
-      {/* Audit input — always visible */}
       <div style={{ flex: 1 }} />
-
-      <form
-        onSubmit={handleSubmit}
-        className="flex items-center gap-2"
-      >
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="package name"
-          style={{
-            background: "var(--bg-secondary)",
-            border: "1px solid var(--border-strong)",
-            borderRadius: "var(--radius)",
-            padding: "5px 12px",
-            fontFamily: "var(--font-mono)",
-            fontSize: "0.8rem",
-            color: "var(--text)",
-            width: 180,
-            outline: "none",
-          }}
-        />
-        <button
-          type="submit"
-          disabled={!input.trim()}
-          className="disabled:opacity-30 disabled:cursor-not-allowed"
-          style={{
-            padding: "5px 14px",
-            border: "none",
-            borderRadius: "var(--radius)",
-            background: "var(--accent)",
-            color: "#fff",
-            fontWeight: 600,
-            fontSize: "0.75rem",
-            cursor: "pointer",
-            letterSpacing: "0.02em",
-            whiteSpace: "nowrap",
-          }}
-        >
-          Audit
-        </button>
-      </form>
 
       {paymentStatus && (
         <span
