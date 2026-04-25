@@ -27,9 +27,9 @@ app.use("/*", cors({ origin: "*" }));
 const PAYMENT_ENABLED = !!config.payeeAddress;
 const ARC_CHAIN_ID = 5042002;
 const ARC_USDC = "0x3600000000000000000000000000000000000000" as const;
-const ARC_USDC_DECIMALS = 18;
-// $0.001 = 0.001 * 10^18 = 1e15
-const AUDIT_PRICE_WEI = BigInt(1e15);
+const ARC_USDC_DECIMALS = 6;
+// $0.001 = 0.001 * 10^6 = 1000
+const AUDIT_PRICE_WEI = BigInt(1000);
 
 const arcTestnet = defineChain({
   id: ARC_CHAIN_ID,
