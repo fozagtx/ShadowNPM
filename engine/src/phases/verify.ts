@@ -344,6 +344,14 @@ export async function verifyProofs(
     return proofs;
   }
 
+  // Check if Docker is available — skip verification gracefully if not
+  const dockerCheck = await dockerExec(["info"], 5000);
+  if (dockerCheck.exitCode !== 0) {
+    console.log("[verify] Docker not available, skipping verification — returning proofs as-is");
+    emit?.("verify_started", { totalTests: 0 });
+    return proofs;
+  }
+
   console.log(`[verify] verifying ${proofsWithTests.length} proofs with tests`);
   emit?.("verify_started", { totalTests: proofsWithTests.length });
 

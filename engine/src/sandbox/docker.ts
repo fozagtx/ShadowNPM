@@ -15,13 +15,18 @@ export function dockerExec(args: string[], timeoutMs: number): Promise<ExecResul
       encoding: "utf-8",
     }, (error, stdout, stderr) => {
       const timedOut = error?.killed === true;
+      const errCode = (error as NodeJS.ErrnoException)?.code;
 
       let exitCode: number;
-      if (timedOut) {
+      if (errCode === "ENOENT") {
+        // docker binary not found
+        resolve({ stdout: "", stderr: "docker not found", exitCode: 127, timedOut: false });
+        return;
+      } else if (timedOut) {
         exitCode = -1;
       } else if (!error) {
         exitCode = 0;
-      } else if ((error as NodeJS.ErrnoException).code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
+      } else if (errCode === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
         exitCode = -1;
       } else {
         exitCode = child.exitCode ?? 1;
