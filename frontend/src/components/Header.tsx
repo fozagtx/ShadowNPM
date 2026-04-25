@@ -10,7 +10,6 @@ export function Header() {
   const verdict = useAuditStore((s) => s.verdict);
   const reset = useAuditStore((s) => s.reset);
   const startAudit = useAuditStore((s) => s.startAudit);
-  const error = useAuditStore((s) => s.error);
   const paymentStatus = useAuditStore((s) => s.paymentStatus);
   const walletAddress = useWalletStore((s) => s.address);
 
