@@ -10,10 +10,7 @@ export function Header() {
   const reset = useAuditStore((s) => s.reset);
   const paymentStatus = useAuditStore((s) => s.paymentStatus);
   const walletAddress = useWalletStore((s) => s.address);
-  const walletConnect = useWalletStore((s) => s.connect);
   const walletDisconnect = useWalletStore((s) => s.disconnect);
-  const walletConnecting = useWalletStore((s) => s.isConnecting);
-  const walletError = useWalletStore((s) => s.error);
 
   const hasAudit = isRunning || verdict;
 
@@ -102,7 +99,7 @@ export function Header() {
         </span>
       )}
 
-      {walletAddress && !paymentStatus ? (
+      {walletAddress && !paymentStatus && (
         <button
           onClick={walletDisconnect}
           title="Disconnect wallet"
@@ -131,26 +128,6 @@ export function Header() {
             }}
           />
           {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
-        </button>
-      ) : !walletAddress && !paymentStatus && (
-        <button
-          onClick={walletConnect}
-          disabled={walletConnecting}
-          title={walletError || "Connect MetaMask wallet"}
-          style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: "0.65rem",
-            color: walletError ? "var(--danger)" : "var(--arc-blue)",
-            border: `1px solid ${walletError ? "var(--danger)" : "var(--arc-blue)"}`,
-            borderRadius: 9999,
-            padding: "3px 12px",
-            background: "none",
-            cursor: walletConnecting ? "wait" : "pointer",
-            whiteSpace: "nowrap",
-            opacity: walletConnecting ? 0.5 : 0.85,
-          }}
-        >
-          {walletConnecting ? "Connecting..." : "Connect Wallet"}
         </button>
       )}
 
