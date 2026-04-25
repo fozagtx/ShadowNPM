@@ -42,8 +42,16 @@ const arcTestnet = defineChain({
 
 if (config.payeeAddress && process.env.SHADOWNPM_PRIVATE_KEY) {
   // Self-hosted x402 facilitator for Arc testnet
-  let pk = process.env.SHADOWNPM_PRIVATE_KEY.trim();
+  let pk = process.env.SHADOWNPM_PRIVATE_KEY.trim()
+    .replace(/^["']+|["']+$/g, "")   // strip wrapping quotes
+    .replace(/\s+/g, "");            // strip any whitespace/newlines
   if (!pk.startsWith("0x")) pk = `0x${pk}`;
+  // Sanity check: must be 0x + 64 hex chars
+  if (!/^0x[0-9a-fA-F]{64}$/.test(pk)) {
+    console.error(`[x402] SHADOWNPM_PRIVATE_KEY is malformed (length=${pk.length}). Expected 0x + 64 hex chars.`);
+    console.error(`[x402] First 4 chars: "${pk.slice(0, 4)}", last 4 chars: "${pk.slice(-4)}"`);
+    process.exit(1);
+  }
   const account = privateKeyToAccount(pk as `0x${string}`);
   const walletClient = createWalletClient({
     account,
