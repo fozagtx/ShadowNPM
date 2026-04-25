@@ -12,7 +12,8 @@ import { x402ResourceServer } from "@x402/core/server";
 import { ExactEvmScheme as ExactEvmServerScheme } from "@x402/evm/exact/server";
 import { x402Facilitator } from "@x402/core/facilitator";
 import { ExactEvmScheme as ExactEvmFacilitatorScheme } from "@x402/evm/exact/facilitator";
-import { createPublicClient, createWalletClient, http, defineChain } from "viem";
+import { toFacilitatorEvmSigner } from "@x402/evm";
+import { createWalletClient, http, defineChain, publicActions } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 import { config } from "./config.js";
@@ -57,14 +58,10 @@ if (config.payeeAddress && process.env.SHADOWNPM_PRIVATE_KEY) {
     account,
     chain: arcTestnet,
     transport: http(),
-  });
-  const publicClient = createPublicClient({
-    chain: arcTestnet,
-    transport: http(),
-  });
+  }).extend(publicActions);
 
-  // The facilitator signer needs both wallet + public client methods
-  const facilitatorSigner = { ...publicClient, ...walletClient };
+  // Wrap wallet client with toFacilitatorEvmSigner (adds getAddresses())
+  const facilitatorSigner = toFacilitatorEvmSigner(walletClient as any);
 
   const facilitator = new x402Facilitator();
   facilitator.register(
