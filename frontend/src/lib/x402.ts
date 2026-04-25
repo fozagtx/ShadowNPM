@@ -20,14 +20,14 @@ export async function createPaymentHeaders(
     throw new Error("Server returned 402 but payment is not configured. Try again later.");
   }
 
-  // Build x402-compatible signer manually — viem puts address at .account.address
-  // but x402 expects it at .address
-  const signer = {
-    address: walletClient.account?.address ?? walletClient.address,
-    signTypedData: (msg: any) => walletClient.signTypedData(msg),
-    readContract: walletClient.readContract?.bind(walletClient),
-    getTransactionCount: walletClient.getTransactionCount?.bind(walletClient),
-  };
+  // Build x402-compatible signer — x402 expects .address at top level
+  // but viem puts it at .account.address
+  const address = walletClient.account?.address ?? walletClient.address;
+  if (!address) {
+    throw new Error("Wallet has no address — reconnect your wallet and try again.");
+  }
+  const signer = Object.create(walletClient);
+  signer.address = address;
 
   const client = new x402Client();
   registerExactEvmScheme(client, { signer });
