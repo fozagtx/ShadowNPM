@@ -1,0 +1,21 @@
+node_modules
+.DS_Store
+.env
+.env.*
+!.env.example
+!.env.template
+openclaw/.env.gateway
+dist
+build
+coverage
+.cache
+videos
+
+# Claude workspace
+.claude-workspace/
+.claude/
+
+# Demo output
+scripts/demo-results.json
+CLAUDE.md
+Agent.md

@@ -1,0 +1,9 @@
+{
+  "name": "shadownpm",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix frontend install && npm --prefix frontend run build && npm --prefix engine install && npm --prefix engine run build",
+    "start": "node engine/dist/index.js",
+    "dev": "./run.sh"
+  }
+}
