@@ -7,15 +7,6 @@ import { z } from "zod";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { paymentMiddleware } from "@x402/hono";
-import { x402ResourceServer } from "@x402/core/server";
-import { ExactEvmScheme as ExactEvmServerScheme } from "@x402/evm/exact/server";
-import { x402Facilitator } from "@x402/core/facilitator";
-import { ExactEvmScheme as ExactEvmFacilitatorScheme } from "@x402/evm/exact/facilitator";
-
-import { createWalletClient, http, defineChain, publicActions } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
-
 import { config } from "./config.js";
 import { runAudit } from "./pipeline.js";
 import { publishAuditResults } from "./publish.js";
@@ -28,103 +19,16 @@ const app = new Hono();
 app.use("/*", cors({ origin: "*" }));
 
 // ---------------------------------------------------------------------------
-// x402 Nanopayment middleware — charges USDC per audit on Arc testnet
+// Payment config
 // ---------------------------------------------------------------------------
 
-const ARC_TESTNET = "eip155:5042002" as const;
+const PAYMENT_ENABLED = !!config.payeeAddress;
 
-const arcTestnet = defineChain({
-  id: 5042002,
-  name: "Arc Testnet",
-  nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
-  rpcUrls: { default: { http: ["https://rpc.testnet.arc.network"] } },
-  testnet: true,
-});
-
-if (config.payeeAddress && process.env.SHADOWNPM_PRIVATE_KEY) {
-  // Self-hosted x402 facilitator for Arc testnet
-  let pk = process.env.SHADOWNPM_PRIVATE_KEY.trim()
-    .replace(/^["']+|["']+$/g, "")   // strip wrapping quotes
-    .replace(/\s+/g, "");            // strip any whitespace/newlines
-  if (!pk.startsWith("0x")) pk = `0x${pk}`;
-  // Sanity check: must be 0x + 64 hex chars
-  if (!/^0x[0-9a-fA-F]{64}$/.test(pk)) {
-    console.error(`[x402] SHADOWNPM_PRIVATE_KEY is malformed (length=${pk.length}). Expected 0x + 64 hex chars.`);
-    console.error(`[x402] First 4 chars: "${pk.slice(0, 4)}", last 4 chars: "${pk.slice(-4)}"`);
-    process.exit(1);
-  }
-  const account = privateKeyToAccount(pk as `0x${string}`);
-  const walletClient = createWalletClient({
-    account,
-    chain: arcTestnet,
-    transport: http(),
-  }).extend(publicActions);
-
-  // Build facilitator signer manually — toFacilitatorEvmSigner reads .address
-  // but viem puts it at .account.address
-  const facilitatorSigner = Object.assign(Object.create(walletClient), walletClient, {
-    address: account.address,
-    getAddresses: () => [account.address],
-  });
-
-  const facilitator = new x402Facilitator();
-  facilitator.register(
-    ARC_TESTNET,
-    new ExactEvmFacilitatorScheme(facilitatorSigner as any),
-  );
-
-  // Arc testnet USDC: 0x3600000000000000000000000000000000000000, 18 decimals
-  const arcUsdcServer = new ExactEvmServerScheme();
-  arcUsdcServer.registerMoneyParser(async (amount: number, network: string) => {
-    if (network === ARC_TESTNET) {
-      const decimals = 18;
-      const tokenAmount = BigInt(Math.round(amount * 10 ** decimals)).toString();
-      return {
-        amount: tokenAmount,
-        asset: "0x3600000000000000000000000000000000000000",
-        extra: { name: "USDC", version: "2" },
-      };
-    }
-    return null;
-  });
-
-  const resourceServer = new x402ResourceServer(facilitator as any)
-    .register(ARC_TESTNET, arcUsdcServer);
-
-  const routeConfig = {
-    "POST /audit": {
-      accepts: {
-        scheme: "exact",
-        price: config.auditPriceUsd,
-        network: ARC_TESTNET,
-        payTo: config.payeeAddress,
-      },
-      description: "NPM package security audit",
-      mimeType: "application/json",
-    },
-    "POST /audit/stream": {
-      accepts: {
-        scheme: "exact",
-        price: config.auditPriceUsd,
-        network: ARC_TESTNET,
-        payTo: config.payeeAddress,
-      },
-      description: "NPM package security audit (streaming)",
-      mimeType: "application/json",
-    },
-  };
-
-  const x402mw = paymentMiddleware(routeConfig, resourceServer);
-
-  app.use(x402mw);
-
-  console.log(`[x402] Payment enabled: ${config.auditPriceUsd} USDC per audit on Arc testnet`);
-  console.log(`[x402] Payee: ${config.payeeAddress}`);
-  console.log(`[x402] Self-hosted facilitator with signer ${account.address}`);
-} else if (config.payeeAddress) {
-  console.log("[x402] SHADOWNPM_PAYEE_ADDRESS set but SHADOWNPM_PRIVATE_KEY missing — audits are free");
+if (PAYMENT_ENABLED) {
+  console.log(`[payment] Audits cost ${config.auditPriceUsd} USDC on Arc testnet`);
+  console.log(`[payment] Payee: ${config.payeeAddress}`);
 } else {
-  console.log("[x402] No SHADOWNPM_PAYEE_ADDRESS set — audits are free");
+  console.log("[payment] No SHADOWNPM_PAYEE_ADDRESS set — audits are free");
 }
 
 const AuditRequest = z.object({
@@ -198,8 +102,6 @@ app.post("/audit", async (c) => {
   if (!parsed.success) {
     return c.json({ error: "Invalid request", details: parsed.error.format() }, 400);
   }
-
-  console.log(`[auth] x402 payment verified for ${parsed.data.packageName}`);
 
   try {
     const report = await enqueueAudit(parsed.data.packageName, parsed.data.version);

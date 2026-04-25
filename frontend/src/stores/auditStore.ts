@@ -13,8 +13,6 @@ import type {
   InventoryMeta,
 } from "../lib/types";
 import { PHASE_ORDER, PHASE_LABELS } from "../lib/types";
-import { useWalletStore } from "./walletStore";
-import { createPaymentHeaders } from "../lib/x402";
 
 const API_BASE = import.meta.env.DEV ? "/api" : "";
 
@@ -60,8 +58,8 @@ interface AuditState {
   autoFollow: boolean;
   error: string | null;
 
-  // Payment state
-  paymentStatus: "wallet-connecting" | "signing" | "retrying" | null;
+  // Payment state (kept for UI compatibility)
+  paymentStatus: null;
 
   // Animation state
   agentThinking: boolean;
@@ -172,81 +170,26 @@ export const useAuditStore = create<AuditState>((set, get) => ({
     get().reset();
     set({ packageName, isRunning: true });
 
-    const requestBody = JSON.stringify({ packageName, ...(version && { version }) });
-    const requestHeaders: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-
     let res: Response;
     try {
       res = await fetch(`${API_BASE}/audit/stream`, {
         method: "POST",
-        headers: requestHeaders,
-        body: requestBody,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ packageName, ...(version && { version }) }),
       });
     } catch {
       set({ isRunning: false, error: "Failed to connect to audit engine" });
       return;
     }
 
-    // Handle non-OK responses
     if (!res.ok) {
-      // x402 payment required — connect wallet, sign, retry
-      if (res.status === 402) {
-        // Connect wallet if needed
-        if (!useWalletStore.getState().address) {
-          if (!(window as any).ethereum) {
-            set({ isRunning: false, error: "Install MetaMask to pay for audits" });
-            return;
-          }
-          set({ paymentStatus: "wallet-connecting" });
-          await useWalletStore.getState().connect();
-          const updated = useWalletStore.getState();
-          if (!updated.address) {
-            set({ isRunning: false, paymentStatus: null, error: updated.error || "Wallet connection failed" });
-            return;
-          }
-        }
-
-        // Sign payment
-        set({ paymentStatus: "signing" });
-        const signer = useWalletStore.getState().getSigner();
-        if (!signer) {
-          set({ isRunning: false, paymentStatus: null, error: "Wallet not available" });
-          return;
-        }
-
-        let paymentHeaders: Record<string, string>;
-        try {
-          paymentHeaders = await createPaymentHeaders(res, signer);
-        } catch (err: any) {
-          console.error("[x402] Payment failed:", err);
-          set({ isRunning: false, paymentStatus: null, error: err?.message || "Payment signing failed" });
-          return;
-        }
-
-        // Retry with payment
-        set({ paymentStatus: "retrying" });
-        try {
-          res = await fetch(`${API_BASE}/audit/stream`, {
-            method: "POST",
-            headers: { ...requestHeaders, ...paymentHeaders },
-            body: requestBody,
-          });
-        } catch {
-          set({ isRunning: false, paymentStatus: null, error: "Failed to connect to audit engine" });
-          return;
-        }
-        set({ paymentStatus: null });
-
-        if (!res.ok) {
-          set({ isRunning: false, error: `Payment accepted but engine returned ${res.status}` });
-          return;
-        }
-      } else {
-        set({ isRunning: false, error: `Engine returned ${res.status}` });
-        return;
-      }
+      let msg = `Engine returned ${res.status}`;
+      try {
+        const body = await res.json();
+        if (body.error) msg = body.error;
+      } catch { /* ignore */ }
+      set({ isRunning: false, error: msg });
+      return;
     }
 
     let auditId: string;

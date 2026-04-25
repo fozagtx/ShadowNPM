@@ -8,7 +8,6 @@ export function Header() {
   const packageName = useAuditStore((s) => s.packageName);
   const verdict = useAuditStore((s) => s.verdict);
   const reset = useAuditStore((s) => s.reset);
-  const paymentStatus = useAuditStore((s) => s.paymentStatus);
   const walletAddress = useWalletStore((s) => s.address);
   const walletDisconnect = useWalletStore((s) => s.disconnect);
 
@@ -72,34 +71,7 @@ export function Header() {
 
       <div style={{ flex: 1 }} />
 
-      {paymentStatus && (
-        <span
-          style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: "0.68rem",
-            color: "var(--arc-blue)",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            whiteSpace: "nowrap",
-          }}
-        >
-          <span
-            style={{
-              width: 6,
-              height: 6,
-              borderRadius: "50%",
-              background: "var(--arc-blue)",
-              animation: "pulse-blue 1.5s ease-in-out infinite",
-            }}
-          />
-          {paymentStatus === "wallet-connecting" && "Connecting wallet..."}
-          {paymentStatus === "signing" && "Sign in wallet..."}
-          {paymentStatus === "retrying" && "Processing payment..."}
-        </span>
-      )}
-
-      {walletAddress && !paymentStatus && (
+      {walletAddress && (
         <button
           onClick={walletDisconnect}
           title="Disconnect wallet"

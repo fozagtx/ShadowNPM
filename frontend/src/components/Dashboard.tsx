@@ -4,7 +4,7 @@ import { ArcLogo } from "./ArcLogo";
 
 export function Dashboard() {
   const startAudit = useAuditStore((s) => s.startAudit);
-  const paymentStatus = useAuditStore((s) => s.paymentStatus);
+  const isRunning = useAuditStore((s) => s.isRunning);
   const error = useAuditStore((s) => s.error);
 
   const [input, setInput] = useState("");
@@ -43,7 +43,7 @@ export function Dashboard() {
         Enter an npm package name to scan for malicious code.
         <br />
         <span style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>
-          $0.001 USDC per audit on{" "}
+          Powered by{" "}
           <ArcLogo size={13} style={{ verticalAlign: "-2px" }} />
         </span>
       </p>
@@ -73,7 +73,7 @@ export function Dashboard() {
         />
         <button
           type="submit"
-          disabled={!input.trim() || !!paymentStatus}
+          disabled={!input.trim() || isRunning}
           className="disabled:opacity-30 disabled:cursor-not-allowed"
           style={{
             padding: "10px 20px",
@@ -89,11 +89,7 @@ export function Dashboard() {
             fontFamily: "var(--font-mono)",
           }}
         >
-          {paymentStatus === "signing"
-            ? "Sign in wallet..."
-            : paymentStatus === "retrying"
-              ? "Processing..."
-              : "Pay & Audit"}
+          Audit
         </button>
       </form>
 
