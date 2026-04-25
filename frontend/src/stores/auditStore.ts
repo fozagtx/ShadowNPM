@@ -261,23 +261,26 @@ export const useAuditStore = create<AuditState>((set, get) => ({
   connectToSession: async (auditId: string) => {
     get().reset();
     set({ auditId, isRunning: true });
-    sessionStorage.setItem("shadownpm_auditId", auditId);
 
     // Check if session exists before connecting SSE
     try {
       const res = await fetch(`${API_BASE}/audit/${auditId}/report`);
       if (!res.ok) {
-        const msg = res.status === 404
-          ? "This audit session has expired or was not found."
-          : `Engine returned ${res.status}`;
-        set({ isRunning: false, error: msg });
+        // Session gone — clear stale storage and go back to landing silently
+        sessionStorage.removeItem("shadownpm_auditId");
+        set({ auditId: null, isRunning: false });
+        if (window.location.pathname !== "/") {
+          history.replaceState(null, "", "/");
+        }
         return;
       }
     } catch {
-      set({ isRunning: false, error: "Failed to connect to audit engine" });
+      sessionStorage.removeItem("shadownpm_auditId");
+      set({ auditId: null, isRunning: false });
       return;
     }
 
+    sessionStorage.setItem("shadownpm_auditId", auditId);
     connectSSE(auditId, set, get);
   },
 

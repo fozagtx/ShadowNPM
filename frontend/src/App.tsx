@@ -9,6 +9,7 @@ function App() {
   const isRunning = useAuditStore((s) => s.isRunning);
   const verdict = useAuditStore((s) => s.verdict);
   const auditId = useAuditStore((s) => s.auditId);
+  const error = useAuditStore((s) => s.error);
   const connectToSession = useAuditStore((s) => s.connectToSession);
   const reset = useAuditStore((s) => s.reset);
   const hasAudit = isRunning || verdict;
@@ -54,6 +55,28 @@ function App() {
       <Header />
       <main className={`flex-1 flex flex-col ${hasAudit ? "min-h-0 overflow-hidden" : ""}`}>
         {hasAudit ? <AuditView /> : <Landing />}
+        {error && !hasAudit && (
+          <div
+            style={{
+              position: "fixed",
+              bottom: 24,
+              left: "50%",
+              transform: "translateX(-50%)",
+              background: "var(--bg-secondary)",
+              border: "1px solid var(--danger)",
+              borderRadius: "var(--radius)",
+              padding: "10px 20px",
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.75rem",
+              color: "var(--danger)",
+              maxWidth: 480,
+              textAlign: "center",
+              zIndex: 100,
+            }}
+          >
+            {error}
+          </div>
+        )}
       </main>
     </div>
   );
