@@ -44,7 +44,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     set({ isConnecting: true, error: null });
 
     try {
-      // Request accounts
+      // Request accounts (prompts MetaMask popup)
       const accounts = (await ethereum.request({
         method: "eth_requestAccounts",
       })) as string[];
@@ -116,3 +116,17 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   getSigner: () => walletClient,
 }));
+
+// Auto-reconnect: if MetaMask already has connected accounts, restore silently
+(async () => {
+  const ethereum = (window as any).ethereum;
+  if (!ethereum) return;
+  try {
+    const accounts = (await ethereum.request({ method: "eth_accounts" })) as string[];
+    if (accounts.length > 0) {
+      const address = accounts[0] as `0x${string}`;
+      walletClient = createExtendedClient(address, custom(ethereum));
+      useWalletStore.setState({ address });
+    }
+  } catch { /* silent */ }
+})();

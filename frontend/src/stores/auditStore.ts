@@ -62,6 +62,7 @@ interface AuditState {
 
   // Payment state
   paymentStatus: "sending" | "verifying" | null;
+  paymentTxHash: string | null;
 
   // Animation state
   agentThinking: boolean;
@@ -100,6 +101,7 @@ const initialState = {
   autoFollow: true,
   error: null,
   paymentStatus: null,
+  paymentTxHash: null,
   agentThinking: false,
   triageProgress: null,
 };
@@ -201,7 +203,7 @@ export const useAuditStore = create<AuditState>((set, get) => ({
       }
 
       // Step 3: Verify payment on engine
-      set({ paymentStatus: "verifying" });
+      set({ paymentStatus: "verifying", paymentTxHash: txHash });
       try {
         const verifyRes = await fetch(`${API_BASE}/verify-payment`, {
           method: "POST",
@@ -266,13 +268,15 @@ export const useAuditStore = create<AuditState>((set, get) => ({
     }
     set({ auditId });
     sessionStorage.setItem("shadownpm_auditId", auditId);
+    sessionStorage.setItem("shadownpm_packageName", packageName);
 
     connectSSE(auditId, set, get);
   },
 
   connectToSession: async (auditId: string) => {
     get().reset();
-    set({ auditId, isRunning: true });
+    const savedName = sessionStorage.getItem("shadownpm_packageName") || "";
+    set({ auditId, isRunning: true, packageName: savedName });
 
     // Check if session exists before connecting SSE
     try {

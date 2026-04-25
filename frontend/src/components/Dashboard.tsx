@@ -7,6 +7,7 @@ export function Dashboard() {
   const isRunning = useAuditStore((s) => s.isRunning);
   const paymentStatus = useAuditStore((s) => s.paymentStatus);
   const error = useAuditStore((s) => s.error);
+  const paymentTxHash = useAuditStore((s) => s.paymentTxHash);
 
   const [input, setInput] = useState("");
 
@@ -112,6 +113,22 @@ export function Dashboard() {
         >
           {error}
         </p>
+      )}
+
+      {paymentTxHash && (
+        <a
+          href={`https://testnet.arcscan.app/tx/${paymentTxHash}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: "0.7rem",
+            color: "var(--accent)",
+            textDecoration: "underline",
+          }}
+        >
+          View payment tx on ArcScan
+        </a>
       )}
     </div>
   );

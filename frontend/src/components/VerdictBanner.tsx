@@ -6,6 +6,7 @@ export function VerdictBanner() {
   const capabilities = useAuditStore((s) => s.capabilities);
   const findings = useAuditStore((s) => s.findings);
   const proofs = useAuditStore((s) => s.proofs);
+  const paymentTxHash = useAuditStore((s) => s.paymentTxHash);
 
   const dealbreaker = proofs.find(
     (p) => p.kind === "STRUCTURAL" && p.evidence?.startsWith("Dealbreaker:")
@@ -105,9 +106,20 @@ export function VerdictBanner() {
           }}
         >
           {statsText}
-          <span style={{ color: "var(--text-muted)", marginLeft: 8, fontSize: "0.62rem" }}>
-            Settled on Arc
-          </span>
+          {paymentTxHash ? (
+            <a
+              href={`https://testnet.arcscan.app/tx/${paymentTxHash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: "var(--arc-blue)", marginLeft: 8, fontSize: "0.62rem", textDecoration: "underline" }}
+            >
+              Settled on Arc
+            </a>
+          ) : (
+            <span style={{ color: "var(--text-muted)", marginLeft: 8, fontSize: "0.62rem" }}>
+              Settled on Arc
+            </span>
+          )}
         </span>
       )}
 
