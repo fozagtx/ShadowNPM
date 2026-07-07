@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { dockerExec, type ExecResult } from "./docker.js";
+import { processExec, type ExecResult } from "./docker.js";
 
 export type { ExecResult };
 
@@ -37,67 +37,70 @@ function sanitize(raw: string): { text: string; injectionDetected: boolean } {
   return { text, injectionDetected: false };
 }
 
+/**
+ * Process-based sandbox controller.
+ * Runs commands via child_process in the package directory.
+ * No Docker required — works on Railway, Fly.io, VPS, anywhere Node.js runs.
+ *
+ * Security notes:
+ *   - Commands run as the same user as the engine process.
+ *   - Memory/timeout limits are enforced via process-level options (--max-old-space-size, timeout).
+ *   - Network access is NOT isolated (the Docker --network=none equivalent is not available).
+ *   - For production use with untrusted packages, Docker isolation is still recommended.
+ */
 export class DockerSandboxController {
-  private containerId: string | null = null;
-  private containerName: string | null = null;
+  private id: string;
+  private packagePath: string | null = null;
 
   constructor(
-    private image: string = "node:22-slim",
+    private _image: string = "node:22-slim",
     private memoryLimit: string = "512m",
     private cpuQuota: number = 1.0,
-    private network: string = "none",
-  ) {}
+    private _network: string = "none",
+  ) {
+    this.id = `shadownpm-proc-${randomUUID().slice(0, 12)}`;
+  }
 
   get isRunning(): boolean {
-    return this.containerId !== null;
+    return this.packagePath !== null;
   }
 
   async start(packagePath: string): Promise<void> {
-    if (this.containerId) throw new Error("Sandbox already running");
-
-    this.containerName = `shadownpm-sandbox-${randomUUID().slice(0, 12)}`;
-
-    const args = [
-      "run", "-d",
-      "--name", this.containerName,
-      `--network=${this.network}`,
-      "--cap-drop=ALL",
-      "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m",
-      "--read-only",
-      `--memory=${this.memoryLimit}`,
-      `--cpus=${this.cpuQuota}`,
-      "--user", "1000:1000",
-      "--pids-limit", "64",
-      "-v", `${packagePath}:/pkg:ro`,
-      "-w", "/pkg",
-      this.image,
-      "sleep", "infinity",
-    ];
-
-    console.log(`[sandbox] starting ${this.containerName}`);
-    const result = await dockerExec(args, 30_000);
-    if (result.exitCode !== 0) {
-      throw new Error(`Failed to start sandbox: ${result.stderr}`);
-    }
-    this.containerId = result.stdout.trim().slice(0, 12);
-    console.log(`[sandbox] started ${this.containerId}`);
+    if (this.packagePath) throw new Error("Sandbox already running");
+    this.packagePath = packagePath;
+    console.log(`[sandbox] process sandbox started (id=${this.id}, cwd=${packagePath})`);
   }
 
   async exec(cmd: string[], timeoutS = 15): Promise<ExecResult> {
-    if (!this.containerName) throw new Error("Sandbox not running — call start() first");
+    if (!this.packagePath) throw new Error("Sandbox not running — call start() first");
+
+    const command = cmd[0]!;
+    const args = cmd.slice(1);
 
     const cmdPreview = cmd.map((c) => (c.length > 120 ? c.slice(0, 120) + "…" : c)).join(" ");
     console.log(`[sandbox:exec] $ ${cmdPreview}`);
 
-    const args = ["exec", this.containerName, ...cmd];
+    // Parse memory limit (e.g., "512m" -> 512)
+    const memoryMb = parseInt(this.memoryLimit, 10) || 512;
+
+    // Inject --max-old-space-size for Node.js commands to limit memory
+    let env: Record<string, string> | undefined;
+    if (command === "node" || command === "npx") {
+      env = {
+        NODE_OPTIONS: `--max-old-space-size=${memoryMb}`,
+      };
+    }
+
     const start = Date.now();
-    const result = await dockerExec(args, timeoutS * 1000);
+    const result = await processExec(command, args, {
+      cwd: this.packagePath,
+      timeoutMs: timeoutS * 1000,
+      env,
+    });
     const elapsed = Date.now() - start;
 
     if (result.timedOut) {
       console.log(`[sandbox:exec] TIMEOUT after ${elapsed}ms`);
-      // Best-effort kill processes inside container
-      await dockerExec(["exec", this.containerName, "kill", "-9", "-1"], 5000).catch(() => {});
     }
 
     const stdout = sanitize(result.stdout);
@@ -121,11 +124,8 @@ export class DockerSandboxController {
   }
 
   async stop(): Promise<void> {
-    if (!this.containerName) return;
-    console.log(`[sandbox] stopping ${this.containerId}`);
-    await dockerExec(["rm", "-f", this.containerName], 10_000).catch(() => {});
-    this.containerId = null;
-    this.containerName = null;
-    console.log("[sandbox] stopped");
+    console.log(`[sandbox] process sandbox stopped (id=${this.id})`);
+    this.packagePath = null;
   }
 }
+

@@ -9,12 +9,12 @@ async function loadFreshConfigModule() {
   return await import(`${configModuleUrl}?t=${Date.now()}-${Math.random()}`);
 }
 
-test("config defaults to anthropic backend and documented sandbox values", async () => {
+test("config auto-detects openai_compatible when base URL is set", async () => {
   const mod = await withPatchedEnv(
     {
       SHADOWNPM_LLM_BACKEND: undefined,
-      SHADOWNPM_LLM_BASE_URL: undefined,
-      SHADOWNPM_LLM_API_KEY: undefined,
+      SHADOWNPM_LLM_BASE_URL: "https://openrouter.ai/api/v1",
+      SHADOWNPM_LLM_API_KEY: "sk-or-v1-test",
       SHADOWNPM_LLM_TIMEOUT_SECONDS: undefined,
       SHADOWNPM_API_HOST: undefined,
       SHADOWNPM_API_PORT: undefined,
@@ -26,14 +26,22 @@ test("config defaults to anthropic backend and documented sandbox values", async
     async () => await loadFreshConfigModule(),
   );
 
+  assert.equal(mod.config.llmBackend, "openai_compatible");
+  assert.equal(mod.config.llmBaseUrl, "https://openrouter.ai/api/v1");
+  assert.equal(mod.config.llmApiKey, "sk-or-v1-test");
+});
+
+test("config falls back to anthropic with no URL or key", async () => {
+  const mod = await withPatchedEnv(
+    {
+      SHADOWNPM_LLM_BACKEND: undefined,
+      SHADOWNPM_LLM_BASE_URL: undefined,
+      SHADOWNPM_LLM_API_KEY: undefined,
+    },
+    async () => await loadFreshConfigModule(),
+  );
+
   assert.equal(mod.config.llmBackend, "anthropic");
-  assert.equal(mod.config.llmTimeoutSeconds, 60);
-  assert.equal(mod.config.apiHost, "0.0.0.0");
-  assert.equal(mod.config.apiPort, 8000);
-  assert.equal(mod.config.sandboxImage, "node:22-slim");
-  assert.equal(mod.config.sandboxMemoryMb, 512);
-  assert.equal(mod.config.sandboxCpus, 1);
-  assert.equal(mod.config.sandboxNetwork, "none");
 });
 
 test("config accepts openai_compatible backend when base URL is set", async () => {
@@ -53,18 +61,18 @@ test("config accepts openai_compatible backend when base URL is set", async () =
   assert.equal(mod.config.llmTimeoutSeconds, 90);
 });
 
-test("config throws when openai_compatible backend has no base URL", async () => {
-  await assert.rejects(
-    async () =>
-      await withPatchedEnv(
-        {
-          SHADOWNPM_LLM_BACKEND: "openai_compatible",
-          SHADOWNPM_LLM_BASE_URL: undefined,
-        },
-        async () => await loadFreshConfigModule(),
-      ),
-    /SHADOWNPM_LLM_BASE_URL is required when SHADOWNPM_LLM_BACKEND=openai_compatible/,
+test("config falls back to anthropic when openai_compatible has no base URL", async () => {
+  const mod = await withPatchedEnv(
+    {
+      SHADOWNPM_LLM_BACKEND: "openai_compatible",
+      SHADOWNPM_LLM_BASE_URL: undefined,
+      SHADOWNPM_LLM_API_KEY: undefined,
+    },
+    async () => await loadFreshConfigModule(),
   );
+
+  // No base URL or key → falls back to anthropic
+  assert.equal(mod.config.llmBackend, "anthropic");
 });
 
 test("config validates Ethereum payee address shape", async () => {

@@ -21,15 +21,13 @@ const app = new Hono();
 app.use("/*", cors({ origin: "*" }));
 
 // ---------------------------------------------------------------------------
-// Payment config — simple USDC transfer verification on Arc testnet
+// Payment — mandatory. Engine refuses to start without a payee address.
 // ---------------------------------------------------------------------------
 
-const PAYMENT_ENABLED = !!config.payeeAddress;
 const ARC_CHAIN_ID = 5042002;
 const ARC_USDC = "0x3600000000000000000000000000000000000000" as const;
 const ARC_USDC_DECIMALS = 6;
-// $0.001 = 0.001 * 10^6 = 1000
-const AUDIT_PRICE_WEI = BigInt(1000);
+const AUDIT_PRICE_WEI = BigInt(1000); // $0.001 = 0.001 * 10^6
 
 const arcTestnet = defineChain({
   id: ARC_CHAIN_ID,
@@ -39,9 +37,15 @@ const arcTestnet = defineChain({
   testnet: true,
 });
 
-const arcPublicClient = PAYMENT_ENABLED
-  ? createPublicClient({ chain: arcTestnet, transport: http() })
-  : null;
+if (!config.payeeAddress) {
+  console.error("[payment] FATAL: SHADOWNPM_PAYEE_ADDRESS is required. Payments are mandatory.");
+  process.exit(1);
+}
+
+console.log(`[payment] Audits cost $0.001 USDC on Arc testnet`);
+console.log(`[payment] Payee: ${config.payeeAddress}`);
+
+const arcPublicClient = createPublicClient({ chain: arcTestnet, transport: http() });
 
 // Track verified tx hashes to prevent replay
 const verifiedTxHashes = new Set<string>();
@@ -99,13 +103,6 @@ async function verifyPaymentTx(txHash: string): Promise<boolean> {
     console.error(`[payment] Error verifying tx:`, err);
     return false;
   }
-}
-
-if (PAYMENT_ENABLED) {
-  console.log(`[payment] Audits cost $0.001 USDC on Arc testnet`);
-  console.log(`[payment] Payee: ${config.payeeAddress}`);
-} else {
-  console.log("[payment] No SHADOWNPM_PAYEE_ADDRESS set — audits are free");
 }
 
 const AuditRequest = z.object({
@@ -168,9 +165,6 @@ function enqueueAudit(packageName: string, version?: string): Promise<any> {
 // ---------------------------------------------------------------------------
 
 app.get("/payment-info", (c) => {
-  if (!PAYMENT_ENABLED) {
-    return c.json({ required: false });
-  }
   return c.json({
     required: true,
     chainId: ARC_CHAIN_ID,
@@ -189,13 +183,6 @@ app.get("/payment-info", (c) => {
 const paymentTokens = new Map<string, number>(); // token -> expiry timestamp
 
 app.post("/verify-payment", async (c) => {
-  if (!PAYMENT_ENABLED) {
-    // No payment needed — return a free token
-    const token = crypto.randomUUID();
-    paymentTokens.set(token, Date.now() + 5 * 60 * 1000);
-    return c.json({ verified: true, token });
-  }
-
   let body: any;
   try { body = await c.req.json(); } catch {
     return c.json({ error: "Invalid JSON" }, 400);
@@ -218,7 +205,6 @@ app.post("/verify-payment", async (c) => {
 });
 
 function consumePaymentToken(token: string | null | undefined): boolean {
-  if (!PAYMENT_ENABLED) return true;
   if (!token) return false;
   const expiry = paymentTokens.get(token);
   if (!expiry || Date.now() > expiry) {

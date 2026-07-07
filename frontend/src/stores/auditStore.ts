@@ -184,25 +184,24 @@ export const useAuditStore = create<AuditState>((set, get) => ({
       return;
     }
 
-    // Step 2: If payment required, send USDC via MetaMask
+    // Step 2: Send USDC payment via MetaMask
     let paymentToken: string | undefined;
-    if (paymentInfo.required) {
-      const signer = useWalletStore.getState().getSigner();
-      if (!signer) {
-        set({ isRunning: false, error: "Wallet not connected" });
-        return;
-      }
+    const signer = useWalletStore.getState().getSigner();
+    if (!signer) {
+      set({ isRunning: false, error: "Wallet not connected — connect MetaMask to pay for audits" });
+      return;
+    }
 
-      set({ paymentStatus: "sending" });
-      let txHash: string;
-      try {
-        txHash = await sendUsdcPayment(signer, paymentInfo);
-      } catch (err: any) {
-        set({ isRunning: false, paymentStatus: null, error: err?.message || "Payment failed" });
-        return;
-      }
+    set({ paymentStatus: "sending" });
+    let txHash: string;
+    try {
+      txHash = await sendUsdcPayment(signer, paymentInfo);
+    } catch (err: any) {
+      set({ isRunning: false, paymentStatus: null, error: err?.message || "Payment failed" });
+      return;
+    }
 
-      // Step 3: Verify payment on engine
+    // Step 3: Verify payment on engine
       set({ paymentStatus: "verifying", paymentTxHash: txHash });
       try {
         const verifyRes = await fetch(`${API_BASE}/verify-payment`, {
@@ -220,17 +219,6 @@ export const useAuditStore = create<AuditState>((set, get) => ({
         set({ isRunning: false, paymentStatus: null, error: "Payment verification failed" });
         return;
       }
-    } else {
-      // Free mode — get a free token
-      try {
-        const verifyRes = await fetch(`${API_BASE}/verify-payment`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-        });
-        const verifyBody = await verifyRes.json();
-        paymentToken = verifyBody.token;
-      } catch { /* proceed without token */ }
     }
 
     set({ paymentStatus: null });

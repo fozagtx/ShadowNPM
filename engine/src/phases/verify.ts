@@ -3,12 +3,11 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, readFileSync, copyFileSync, mkdirSync, rmSync, existsSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { join, basename, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { randomUUID } from "node:crypto";
 import { generateText } from "ai";
 
 import { config, SOURCE_FILE_TYPES } from "../config.js";
 import { getModel } from "../llm.js";
-import { dockerExec } from "../sandbox/docker.js";
+import { processExec } from "../sandbox/docker.js";
 import type { Proof, Finding } from "../models.js";
 import type { EmitFn } from "../events.js";
 import { TESTGEN_SYSTEM_PROMPT, CAPABILITY_EXAMPLES } from "./test-gen-prompt.js";
@@ -294,8 +293,6 @@ Output ONLY the fixed JavaScript test code.`;
 // ---------------------------------------------------------------------------
 
 async function runVitest(
-  containerName: string,
-  npxPath: string,
   timeoutMs: number,
   workDir: string,
 ): Promise<VitestResult | null> {
@@ -303,10 +300,13 @@ async function runVitest(
   const resultsPath = join(workDir, "vitest-results.json");
   try { rmSync(resultsPath, { force: true }); } catch { /* ok */ }
 
-  const vitestResult = await dockerExec(
-    ["exec", containerName, "sh", "-c",
-      `cd /workspace && ${npxPath} run --reporter=json --outputFile.json=/workspace/vitest-results.json 2>&1; echo VITEST_EXIT=$?`],
-    timeoutMs,
+  const vitestResult = await processExec(
+    "npx",
+    ["vitest", "run", "--reporter=json", "--outputFile.json=vitest-results.json"],
+    {
+      cwd: workDir,
+      timeoutMs,
+    },
   );
 
   console.log(`[verify] vitest exited with code ${vitestResult.exitCode}`);
@@ -344,15 +344,7 @@ export async function verifyProofs(
     return proofs;
   }
 
-  // Check if Docker is available — skip verification gracefully if not
-  const dockerCheck = await dockerExec(["info"], 5000);
-  if (dockerCheck.exitCode !== 0) {
-    console.log("[verify] Docker not available, skipping verification — returning proofs as-is");
-    emit?.("verify_started", { totalTests: 0 });
-    return proofs;
-  }
-
-  console.log(`[verify] verifying ${proofsWithTests.length} proofs with tests`);
+  console.log(`[verify] verifying ${proofsWithTests.length} proofs with tests (native — no Docker)`);
   emit?.("verify_started", { totalTests: proofsWithTests.length });
 
   // 1. Create temp workspace on host
@@ -364,7 +356,6 @@ export async function verifyProofs(
   mkdirSync(generatedDir, { recursive: true });
   mkdirSync(testPkgDir, { recursive: true });
 
-  const containerName = `shadownpm-verify-${randomUUID().slice(0, 12)}`;
   const timeoutMs = config.verifyTimeoutSec * 1000;
   const packageDirName = basename(packagePath);
   const packageSource = findings ? readPackageSource(packagePath) : "";
@@ -404,90 +395,39 @@ export async function verifyProofs(
       return proofs;
     }
 
-    // 2. Start Docker container
-    const verifyImage = "shadownpm-verify";
-    const hasVerifyImage = (await dockerExec(["image", "inspect", verifyImage], 5000)).exitCode === 0;
-    const image = hasVerifyImage ? verifyImage : config.sandboxImage;
-    const network = hasVerifyImage ? "none" : "bridge";
-
-    console.log(`[verify] starting container ${containerName} (image=${image})`);
-    const startResult = await dockerExec([
-      "run", "-d",
-      "--name", containerName,
-      `--network=${network}`,
-      "--cap-drop=ALL",
-      `--memory=${config.sandboxMemoryMb}m`,
-      `--cpus=${config.sandboxCpus}`,
-      "--user", `${process.getuid?.() ?? 1000}:${process.getgid?.() ?? 1000}`,
-      "--pids-limit", "128",
-      "-v", `${workDir}:/workspace`,
-      "-w", "/workspace",
-      image,
-      "sleep", "infinity",
-    ], 30_000);
-
-    if (startResult.exitCode !== 0) {
-      console.error(`[verify] failed to start container: ${startResult.stderr}`);
+    // 2. Install vitest + msw natively in workspace (no Docker needed)
+    console.log("[verify] installing vitest and msw...");
+    const installResult = await processExec(
+      "npm",
+      ["install", "--no-save", "vitest", "msw"],
+      { cwd: workDir, timeoutMs },
+    );
+    if (installResult.exitCode !== 0) {
+      console.error(`[verify] npm install failed (exit=${installResult.exitCode}):`);
+      console.error(installResult.stderr.slice(0, 500));
       for (let i = 0; i < proofs.length; i++) {
         if (proofs[i]!.testFile) {
-          emit?.("verify_test_result", { proofIndex: i, testFile: `finding-${i}.test.ts`, status: "infra_error", error: "container_start_failed" });
+          emit?.("verify_test_result", { proofIndex: i, testFile: `finding-${i}.test.ts`, status: "infra_error", error: "npm_install_failed" });
         }
       }
       return proofs.map((proof) =>
-        proof.testFile ? { ...proof, kind: "TEST_UNCONFIRMED" as const, verifyError: "container_start_failed" } : proof,
+        proof.testFile ? { ...proof, kind: "TEST_UNCONFIRMED" as const, verifyError: "npm_install_failed" } : proof,
       );
     }
-    console.log(`[verify] container started`);
+    console.log("[verify] dependencies ready");
 
-    try {
-      // 3. Make vitest + msw available
-      let depsReady = false;
-      if (hasVerifyImage) {
-        const symlinkResult = await dockerExec(
-          ["exec", containerName, "ln", "-s", "/opt/verify/node_modules", "/workspace/node_modules"],
-          10_000,
-        );
-        if (symlinkResult.exitCode !== 0) {
-          console.error(`[verify] symlink failed (exit=${symlinkResult.exitCode}): ${symlinkResult.stderr}`);
-        } else {
-          depsReady = true;
-        }
-      }
-      if (!depsReady) {
-        console.log("[verify] installing vitest and msw (no pre-built image)...");
-        const installResult = await dockerExec(
-          ["exec", containerName, "sh", "-c", "cd /workspace && npm init -y > /dev/null 2>&1 && npm install --no-save vitest msw 2>&1 | tail -5"],
-          timeoutMs,
-        );
-        if (installResult.exitCode !== 0) {
-          console.error(`[verify] npm install failed (exit=${installResult.exitCode}):`);
-          console.error(installResult.stderr.slice(0, 500));
-          for (let i = 0; i < proofs.length; i++) {
-            if (proofs[i]!.testFile) {
-              emit?.("verify_test_result", { proofIndex: i, testFile: `finding-${i}.test.ts`, status: "infra_error", error: "npm_install_failed" });
-            }
-          }
-          return proofs.map((proof) =>
-            proof.testFile ? { ...proof, kind: "TEST_UNCONFIRMED" as const, verifyError: "npm_install_failed" } : proof,
-          );
-        }
-      }
-      console.log("[verify] dependencies ready");
+    // Track current proof state across retries
+    let currentProofs = [...proofs];
 
-      const npxPath = hasVerifyImage ? "/opt/verify/node_modules/.bin/vitest" : "npx vitest";
+    // ── Retry loop ──
+    for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
+      console.log(`\n[verify] ── attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS} ──`);
+      emit?.("verify_attempt", { attempt: attempt + 1, maxAttempts: MAX_RETRY_ATTEMPTS });
 
-      // Track current proof state across retries
-      let currentProofs = [...proofs];
+      // 3. Run vitest natively
+      const parsed = await runVitest(timeoutMs, workDir);
 
-      // ── Retry loop ──
-      for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
-        console.log(`\n[verify] ── attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS} ──`);
-        emit?.("verify_attempt", { attempt: attempt + 1, maxAttempts: MAX_RETRY_ATTEMPTS });
-
-        // 4. Run vitest
-        const parsed = await runVitest(containerName, npxPath, timeoutMs, workDir);
-
-        if (!parsed?.testResults) {
+      if (!parsed?.testResults) {
           console.log("[verify] could not parse vitest results");
           if (attempt === MAX_RETRY_ATTEMPTS - 1) {
             for (let i = 0; i < currentProofs.length; i++) {
@@ -600,10 +540,6 @@ export async function verifyProofs(
       }
 
       return currentProofs;
-    } finally {
-      await dockerExec(["rm", "-f", containerName], 10_000).catch(() => {});
-      console.log("[verify] container stopped");
-    }
   } finally {
     try {
       rmSync(workDir, { recursive: true, force: true });

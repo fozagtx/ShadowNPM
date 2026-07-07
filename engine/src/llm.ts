@@ -7,11 +7,9 @@ export function getModel(modelName: string) {
   if (config.llmBackend === "anthropic") {
     return anthropic(modelName);
   }
-  if (!config.llmBaseUrl) {
-    throw new Error("SHADOWNPM_LLM_BASE_URL is required for openai_compatible backend");
-  }
+  // openrouter and openai_compatible both use OpenAI-compatible API
   const openai = createOpenAI({
-    baseURL: config.llmBaseUrl,
+    baseURL: config.llmBaseUrl!,
     apiKey: config.llmApiKey ?? "",
   });
   return openai(modelName);
