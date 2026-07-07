@@ -329,7 +329,7 @@ async function runVitest(
 // Main verify function with retry loop
 // ---------------------------------------------------------------------------
 
-/** Phase 2: Verify proofs by running generated Vitest tests in a Docker sandbox.
+/** Phase 2: Verify proofs by running generated Vitest tests.
  *  Includes retry loop: failed tests are regenerated with error feedback up to 3 times. */
 export async function verifyProofs(
   proofs: Proof[],

@@ -1,4 +1,4 @@
-import type { DockerSandboxController } from "../sandbox/controller.js";
+import type { SandboxController } from "../sandbox/controller.js";
 import { INSTRUMENTATION_JS, buildTimerAdvanceJs } from "../sandbox/instrumentation.js";
 
 const ALLOWED_HOOKS = new Set(["preinstall", "postinstall", "install", "prepare"]);
@@ -15,7 +15,7 @@ function parseTraceLog(output: string): string {
   return output;
 }
 
-async function writeInstrumentation(sandbox: DockerSandboxController): Promise<string | null> {
+async function writeInstrumentation(sandbox: SandboxController): Promise<string | null> {
   const result = await sandbox.exec([
     "sh", "-c",
     `cat > /tmp/_instrument.js << 'INSTRUMENT_EOF'\n${INSTRUMENTATION_JS}\nINSTRUMENT_EOF`,
@@ -31,12 +31,12 @@ function appendDiagnostics(output: string, result: { timedOut: boolean; stderr: 
   return out;
 }
 
-export async function evalJsImpl(sandbox: DockerSandboxController, code: string): Promise<string> {
+export async function evalJsImpl(sandbox: SandboxController, code: string): Promise<string> {
   const result = await sandbox.exec(["node", "-e", code]);
   return appendDiagnostics(result.stdout, result, "execution exceeded time limit");
 }
 
-export async function requireAndTraceImpl(sandbox: DockerSandboxController, entrypoint: string): Promise<string> {
+export async function requireAndTraceImpl(sandbox: SandboxController, entrypoint: string): Promise<string> {
   const err = await writeInstrumentation(sandbox);
   if (err) return err;
 
@@ -53,7 +53,7 @@ export async function requireAndTraceImpl(sandbox: DockerSandboxController, entr
 }
 
 export async function runLifecycleHookImpl(
-  sandbox: DockerSandboxController,
+  sandbox: SandboxController,
   hookName: string,
   scripts: Record<string, string>,
 ): Promise<string> {
@@ -86,7 +86,7 @@ export async function runLifecycleHookImpl(
 }
 
 export async function fastForwardTimersImpl(
-  sandbox: DockerSandboxController,
+  sandbox: SandboxController,
   entrypoint: string,
   advanceMs: number,
 ): Promise<string> {

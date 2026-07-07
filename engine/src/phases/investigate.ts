@@ -1,6 +1,6 @@
 import { config } from "../config.js";
 import { CapabilityEnum, type FileVerdict, type Finding, type InvestigationInput, type InventoryReport, type Proof, type ToolCallRecord, type TriageResult } from "../models.js";
-import { DockerSandboxController } from "../sandbox/controller.js";
+import { SandboxController } from "../sandbox/controller.js";
 import { runInvestigationAgent } from "../investigation/agent.js";
 import { LIFECYCLE_SCRIPTS } from "../inventory/parse-manifest.js";
 import type { EmitFn } from "../events.js";
@@ -52,7 +52,7 @@ export async function investigate(
   };
 
   // Start sandbox
-  const sandbox = new DockerSandboxController(
+  const sandbox = new SandboxController(
     config.sandboxImage,
     `${config.sandboxMemoryMb}m`,
     config.sandboxCpus,

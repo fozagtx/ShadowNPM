@@ -7,12 +7,12 @@ import type { AuditLogger } from "../audit-log.js";
 import { SYSTEM_PROMPT, buildUserPrompt } from "./prompt.js";
 import { readFileImpl, listFilesImpl, searchFilesImpl } from "./tools-read.js";
 import { evalJsImpl, requireAndTraceImpl, runLifecycleHookImpl, fastForwardTimersImpl } from "./tools-execute.js";
-import type { DockerSandboxController } from "../sandbox/controller.js";
+import type { SandboxController } from "../sandbox/controller.js";
 import type { EmitFn } from "../events.js";
 
 export async function runInvestigationAgent(
   input: InvestigationInput,
-  sandbox: DockerSandboxController,
+  sandbox: SandboxController,
   lifecycleHooks: Record<string, string>,
   emit?: EmitFn,
   log?: AuditLogger,

@@ -48,7 +48,7 @@ function sanitize(raw: string): { text: string; injectionDetected: boolean } {
  *   - Network access is NOT isolated (the Docker --network=none equivalent is not available).
  *   - For production use with untrusted packages, Docker isolation is still recommended.
  */
-export class DockerSandboxController {
+export class SandboxController {
   private id: string;
   private packagePath: string | null = null;
 

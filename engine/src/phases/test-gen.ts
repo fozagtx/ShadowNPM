@@ -230,7 +230,7 @@ async function generateTestDirect(
       }
 
       // For test fixtures, validate on the host; for real packages skip
-      // (the Docker verify phase with retry handles real packages)
+      // (the verify phase with retry handles real packages)
       const isTestFixture = packageName.startsWith("test-pkg-");
       if (isTestFixture) {
         console.log(`[test-gen] attempt ${attempt + 1}: validating with vitest (test fixture)...`);
@@ -252,8 +252,8 @@ async function generateTestDirect(
           await sleep(1000);
         }
       } else {
-        // Real npm package — accept the test, Docker verify will validate it
-        console.log(`[test-gen] attempt ${attempt + 1}: ACCEPTED (real package, Docker verify will validate)`);
+        // Real npm package — accept the test, verify phase will validate it
+        console.log(`[test-gen] attempt ${attempt + 1}: ACCEPTED (real package, verify will validate)`);
         return code;
       }
     } catch (err) {
