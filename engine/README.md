@@ -32,9 +32,9 @@ Only `OPENROUTER_API_KEY` is required. All other values have sensible defaults.
 |---|---|---|
 | `OPENROUTER_API_KEY` | _(required)_ | OpenRouter API key |
 | `SHADOWNPM_PAYEE_ADDRESS` | hardcoded in config.ts | Address to receive USDC payments |
-| `SHADOWNPM_TRIAGE_MODEL` | `anthropic/claude-3.5-haiku` | Model for triage phase |
-| `SHADOWNPM_INVESTIGATION_MODEL` | `anthropic/claude-sonnet-4-20250514` | Model for investigation |
-| `SHADOWNPM_TEST_GEN_MODEL` | `anthropic/claude-sonnet-4-20250514` | Model for test generation |
+| `SHADOWNPM_TRIAGE_MODEL` | `anthropic/claude-3-haiku` | Model for triage phase |
+| `SHADOWNPM_INVESTIGATION_MODEL` | `anthropic/claude-sonnet-4` | Model for investigation |
+| `SHADOWNPM_TEST_GEN_MODEL` | `anthropic/claude-sonnet-4` | Model for test generation |
 | `SHADOWNPM_INVESTIGATION_ENABLED` | `true` | Set `false` to skip investigation |
 | `SHADOWNPM_SANDBOX_MEMORY_MB` | `512` | Sandbox memory limit |
 | `SHADOWNPM_SANDBOX_CPUS` | `1` | Sandbox CPU quota |

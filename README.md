@@ -84,7 +84,7 @@ No gas for the user (Arc covers it). No custom contracts. Just a standard USDC t
 │  Resolve → Inventory → Triage → Investigate →         │
 │  Test Gen → Verify → Verdict                          │
 ├───────────────────────────────────────────────────────┤
-│  LLM: OpenRouter (Claude 3.5 Haiku / Sonnet 4)       │
+│  LLM: OpenRouter (Claude 3 Haiku / Sonnet 4)          │
 │  Sandbox: child_process (native, no Docker)           │
 │  Settlement: Arc testnet (USDC)                        │
 └─────────────────────────────────────────────────────┘
@@ -135,7 +135,7 @@ Paste that one env var in Railway. No Docker needed — the sandbox runs via nat
 | Frontend | React + Vite + Tailwind CSS + Zustand + CodeMirror 6 |
 | Engine | TypeScript + Hono + Vercel AI SDK |
 | Payment | $0.001 USDC on Arc testnet (verified on-chain) |
-| LLM | OpenRouter — Claude 3.5 Haiku / Claude Sonnet 4 |
+| LLM | OpenRouter — Claude 3 Haiku / Claude Sonnet 4 |
 | Sandbox | Native child_process with memory/timeout limits |
 | Settlement | Arc testnet |
 

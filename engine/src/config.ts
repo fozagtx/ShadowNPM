@@ -17,17 +17,17 @@ const ConfigSchema = z.object({
   facilitatorUrl: z.string().url().default("https://x402.org/facilitator"),
   auditPriceUsd: z.string().default("$0.001"),
 
-  triageModel: z.string().default("anthropic/claude-3.5-haiku"),
+  triageModel: z.string().default("anthropic/claude-3-haiku"),
   triageRiskThreshold: z.coerce.number().int().min(0).max(10).default(3),
 
-  investigationModel: z.string().default("anthropic/claude-sonnet-4-20250514"),
+  investigationModel: z.string().default("anthropic/claude-sonnet-4"),
   maxAgentTurns: z.coerce.number().int().min(1).max(200).default(30),
   investigationEnabled: z
     .string()
     .transform((v) => v.toLowerCase() !== "false")
     .default("true"),
 
-  testGenModel: z.string().default("anthropic/claude-sonnet-4-20250514"),
+  testGenModel: z.string().default("anthropic/claude-sonnet-4"),
   testGenMode: z.enum(["openclaw", "direct"]).default("direct"),
   verifyTimeoutSec: z.coerce.number().int().min(10).max(300).default(60),
 
