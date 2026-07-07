@@ -4,21 +4,14 @@ TypeScript audit pipeline — inventory, LLM static analysis, agentic investigat
 
 ## Prerequisites
 
-- Node.js 20+
-- Docker (for sandbox execution)
-- API key for Anthropic or OpenAI-compatible LLM provider
+- Node.js 22+
+- OpenRouter API key
 
-## Installation
+## Quick Start
 
 ```bash
 npm install
-```
-
-## Usage
-
-```bash
-npx tsx src/index.ts              # dev server on :8000
-npm run build && npm start        # production
+OPENROUTER_API_KEY=sk-or-v1-... npx tsx src/index.ts   # :8000
 ```
 
 Trigger an audit:
@@ -31,99 +24,34 @@ curl -X POST http://localhost:8000/audit \
 
 Health check at `http://localhost:8000/health`.
 
-### Use OpenAI-Compatible Backend
-
-```bash
-export SHADOWNPM_LLM_BACKEND=openai_compatible
-export SHADOWNPM_LLM_MODEL=your-model-name
-export SHADOWNPM_LLM_API_KEY=your-api-key
-export SHADOWNPM_LLM_BASE_URL=https://your-provider.example.com/v1
-```
-
-Anthropic remains available with `SHADOWNPM_LLM_BACKEND=anthropic` (default).
-
-## Analysis Pipeline
-
-See [`docs/architecture-v2.md`](../docs/architecture-v2.md) for the full pipeline design.
-
-```
-npm package → Phase 0: Inventory → Phase 1a: Triage → Phase 1b: Investigation → Phase 1c: Test gen → Phase 2: Verify → AuditReport
-```
-
 ## Configuration
 
-Settings are loaded from environment variables with the `SHADOWNPM_` prefix (or a `.env` file):
+Only `OPENROUTER_API_KEY` is required. All other values have sensible defaults.
 
 | Variable | Default | Description |
 |---|---|---|
-| `SHADOWNPM_API_HOST` | `0.0.0.0` | API listen host |
-| `SHADOWNPM_API_PORT` | `8000` | API listen port |
-| `SHADOWNPM_LLM_BACKEND` | `anthropic` | LLM backend: `anthropic` or `openai_compatible` |
-| `SHADOWNPM_LLM_MODEL` | — | LLM model (per-phase overrides below) |
-| `SHADOWNPM_LLM_BASE_URL` | _(unset)_ | OpenAI-compatible endpoint |
-| `SHADOWNPM_LLM_API_KEY` | _(unset)_ | API key for OpenAI-compatible backend |
-| `SHADOWNPM_LLM_TIMEOUT_SECONDS` | `60` | Request timeout for LLM calls |
-| `SHADOWNPM_TRIAGE_MODEL` | `claude-haiku-4-5-20251001` | Model for triage phase |
-| `SHADOWNPM_TRIAGE_RISK_THRESHOLD` | `3` | Risk score below this skips investigation |
-| `SHADOWNPM_INVESTIGATION_MODEL` | `claude-sonnet-4-6` | Model for investigation phase |
-| `SHADOWNPM_INVESTIGATION_ENABLED` | `true` | Set `false` to skip LLM investigation |
-| `SHADOWNPM_MAX_AGENT_TURNS` | `30` | Max tool-call turns for investigation agent |
-| `SHADOWNPM_TEST_GEN_MODEL` | `claude-sonnet-4-6` | Model for test generation |
-| `SHADOWNPM_SANDBOX_IMAGE` | `node:22-slim` | Docker image for sandbox |
+| `OPENROUTER_API_KEY` | _(required)_ | OpenRouter API key |
+| `SHADOWNPM_PAYEE_ADDRESS` | hardcoded in config.ts | Address to receive USDC payments |
+| `SHADOWNPM_TRIAGE_MODEL` | `anthropic/claude-3.5-haiku` | Model for triage phase |
+| `SHADOWNPM_INVESTIGATION_MODEL` | `anthropic/claude-sonnet-4-20250514` | Model for investigation |
+| `SHADOWNPM_TEST_GEN_MODEL` | `anthropic/claude-sonnet-4-20250514` | Model for test generation |
+| `SHADOWNPM_INVESTIGATION_ENABLED` | `true` | Set `false` to skip investigation |
 | `SHADOWNPM_SANDBOX_MEMORY_MB` | `512` | Sandbox memory limit |
 | `SHADOWNPM_SANDBOX_CPUS` | `1` | Sandbox CPU quota |
-| `SHADOWNPM_SANDBOX_NETWORK` | `none` | Sandbox network mode |
-| `SHADOWNPM_PAYEE_ADDRESS` | _(unset)_ | Address to receive x402 payments |
-| `SHADOWNPM_FACILITATOR_URL` | `https://x402.org/facilitator` | x402 facilitator endpoint |
-| `SHADOWNPM_AUDIT_PRICE_USD` | `$0.001` | Audit price in USDC via x402 |
+| `SHADOWNPM_MAX_AGENT_TURNS` | `30` | Max tool-call turns |
+| `SHADOWNPM_VERIFY_TIMEOUT_SEC` | `60` | Vitest run timeout |
 
-## Deploy to DigitalOcean
+## Pipeline
 
-### 1. Create a Droplet
-
-- Image: **Docker on Ubuntu** (Marketplace)
-- Size: **$16/mo** (2GB / 1 CPU) or higher
-- Region: **Amsterdam**
-- Auth: Password or SSH key
-
-### 2. Setup
-
-```bash
-ssh root@<DROPLET_IP>
-git clone https://github.com/kryczkal/EthCannes2026.git
-cd EthCannes2026/engine
-bash setup-droplet.sh
+```
+npm package → Phase 0: Inventory → Phase 1: Triage → Phase 2: Investigate → Phase 3: Test Gen → Phase 4: Verify → AuditReport
 ```
 
-### 3. Configure
+## Sandbox
 
-```bash
-nano .env
-# Set ANTHROPIC_API_KEY=sk-ant-...
-```
+The investigation phase runs untrusted package code via `child_process` with:
+- Memory limits (`--max-old-space-size`)
+- Hard timeouts per command
+- Prompt injection detection in output
 
-### 4. Run
-
-```bash
-npx tsx src/index.ts
-```
-
-### 5. Verify
-
-```bash
-curl http://<DROPLET_IP>:8000/health
-# {"status":"ok"}
-```
-
-If the port is blocked:
-```bash
-ufw allow 8000
-```
-
-### Production (keep running after SSH disconnect)
-
-```bash
-nohup npx tsx src/index.ts > engine.log 2>&1 &
-```
-
-Check logs: `tail -f engine.log`
+No Docker required. Works on Railway, Fly.io, any Node.js host.

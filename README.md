@@ -2,9 +2,7 @@
 
 > Trust nothing. Verify everything.
 
-Autonomous npm supply chain security auditor powered by agentic AI. Scans packages through a 6-phase security pipeline, generates exploit tests, and delivers verifiable verdicts — all for $0.001 USDC per audit via x402 nanopayments on Arc.
-
-**Built for the [Agentic Economy on Arc](https://lablab.ai/ai-hackathons/nano-payments-arc) hackathon — Per-API Monetization Engine track.**
+Autonomous npm supply chain security auditor powered by agentic AI. Scans packages through a 6-phase security pipeline, generates exploit tests, and delivers verifiable verdicts — all for $0.001 USDC per audit via Arc nanopayments.
 
 ## Why
 
@@ -15,23 +13,26 @@ npm is the largest software registry on earth. Supply chain attacks (event-strea
 ```
 User clicks "Audit lodash"
     │
-    ├── 1. Frontend POSTs /audit/stream
-    │       Engine returns HTTP 402 (Payment Required)
+    ├── 1. Frontend GETs /payment-info
+    │       Returns { token, amount, payTo } for Arc testnet USDC
     │
-    ├── 2. Wallet signs x402 EIP-3009 USDC authorization ($0.001)
-    │       No gas needed — uses USDC's native transferWithAuthorization
+    ├── 2. MetaMask sends $0.001 USDC to engine's payee address
+    │       Standard ERC-20 transfer on Arc testnet
     │
-    ├── 3. Frontend retries with PAYMENT-SIGNATURE header
-    │       Engine verifies payment via x402 facilitator
+    ├── 3. Frontend POSTs /verify-payment with txHash
+    │       Engine verifies Transfer event on-chain, returns token
     │
-    └── 4. 6-Phase AI Audit Pipeline runs:
+    ├── 4. Frontend POSTs /audit/stream with paymentToken
+    │       Engine validates token, starts audit
+    │
+    └── 5. 6-Phase AI Audit Pipeline runs:
             ┌─ Phase 0: Resolve ─── Download & extract package from npm
             ├─ Phase 0: Inventory ─ Structural checks (lifecycle scripts, binaries, obfuscation)
             ├─ Phase 1: Triage ──── LLM scans every file, scores risk 0-10
-            ├─ Phase 2: Investigate ─ Agentic LLM in Docker sandbox with tools:
+            ├─ Phase 2: Investigate ─ Agentic LLM with tools:
             │                         readFile, searchFiles, evalJs, requireAndTrace
             ├─ Phase 3: Test Gen ── AI writes Vitest exploit tests from findings
-            └─ Phase 4: Verify ──── Runs tests in isolated Docker container
+            └─ Phase 4: Verify ──── Runs tests via child_process
                                     ↓
                               SAFE or DANGEROUS
                               (with proof: test code, evidence, capabilities)
@@ -45,31 +46,26 @@ The frontend streams the entire pipeline in real-time:
 - **File explorer** — color-coded risk assessment per file
 - **Results panel** — findings with verification status, evidence, exploit test code
 
-## x402 Payment Model
+## Payment Model
 
-ShadowNPM uses [x402](https://x402.org/) — the HTTP 402 Payment Required protocol by Circle. Every audit costs **$0.001 USDC**, settled on Arc testnet.
+Every audit costs **$0.001 USDC** on Arc testnet. Payments are **mandatory** — the engine refuses to start without a payee address configured.
 
-### How x402 works
+### Flow
 
-1. Client sends `POST /audit` without payment
-2. Server returns `402 Payment Required` with payment requirements in headers
-3. Client signs EIP-3009 USDC authorization (no gas, just a signature)
-4. Client retries with `PAYMENT-SIGNATURE` header containing the signed authorization
-5. Server verifies via the x402 facilitator and runs the audit
+1. Frontend gets payment details from `/payment-info`
+2. User sends USDC via MetaMask to the engine's address
+3. Engine verifies the Transfer event on-chain
+4. Verified payment token unlocks `/audit/stream`
 
-No custom smart contracts. No gas tokens. No transaction fees for the user. Just sign and go.
+No gas for the user (Arc covers it). No custom contracts. Just a standard USDC transfer.
 
 ### Why Arc makes sub-cent pricing viable
 
 | Settlement Layer | Gas per TX | Viable at $0.001/audit? |
 |-----------------|------------|------------------------|
-| Ethereum L1 | $0.50 – $5.00 | No — gas exceeds service price by 500-5000x |
-| L2 (Optimism, Arbitrum) | $0.01 – $0.05 | No — gas still 10-50x the service price |
-| **Arc (nanopayments)** | **~$0** | **Yes — aggregates thousands of payments into single settlement** |
-
-Arc nanopayments batch many micropayments off-chain and settle them in a single on-chain transaction. This makes a $0.001 service economically viable — impossible on any other chain.
-
-**Margin**: At $0.001 revenue per audit, the primary cost is LLM inference (~$0.0003 per audit using Qwen 2.5 Coder 32B via Featherless AI). That's a ~70% gross margin — sustainable only because Arc eliminates per-transaction gas overhead.
+| Ethereum L1 | $0.50 – $5.00 | No |
+| L2 (Optimism, Arbitrum) | $0.01 – $0.05 | No |
+| **Arc (nanopayments)** | **~$0** | **Yes** |
 
 ## Architecture
 
@@ -77,80 +73,60 @@ Arc nanopayments batch many micropayments off-chain and settle them in a single 
 ┌─────────────────────────────────────────────────────┐
 │                    Frontend (React)                   │
 │  Vite + Tailwind + Zustand + CodeMirror + Lenis      │
-│  SSE streaming • x402 wallet • passkey/MetaMask       │
-└──────────────┬───────────────────────────────────────┘
-               │ POST /audit/stream (with x402 payment)
+│  SSE streaming • MetaMask wallet                      │
+└──────────────┬──────────────────────────────────────┘
+               │ POST /audit/stream (with paymentToken)
                ▼
 ┌─────────────────────────────────────────────────────┐
 │                Engine (Hono + TypeScript)              │
-│  x402 middleware (@x402/hono) • CORS • SSE events     │
+│  CORS • SSE events • Queue (one audit at a time)      │
 ├───────────────────────────────────────────────────────┤
 │  Resolve → Inventory → Triage → Investigate →         │
 │  Test Gen → Verify → Verdict                          │
 ├───────────────────────────────────────────────────────┤
-│  LLM: Featherless AI (Qwen 2.5 Coder 32B)            │
-│  Sandbox: Docker (node:22-slim, network: none)        │
-│  Settlement: Arc testnet (USDC nanopayments)            │
+│  LLM: OpenRouter (Claude 3.5 Haiku / Sonnet 4)       │
+│  Sandbox: child_process (native, no Docker)           │
+│  Settlement: Arc testnet (USDC)                        │
 └─────────────────────────────────────────────────────┘
 ```
-
-## Project Structure
-
-| Directory | Description |
-|-----------|-------------|
-| `frontend/` | React + Vite dashboard — live audit streaming, x402 payment UI |
-| `engine/` | TypeScript audit pipeline — 6-phase AI security analysis |
-| `scripts/` | Demo scripts (50+ transaction generator) |
-| `sandbox/` | Dynamic exploitation harness (Vitest in Docker) |
 
 ## Quick Start
 
 ### Prerequisites
 
 - Node.js 22+
-- Docker (for sandbox phases)
-- MetaMask or compatible wallet (for paid audits)
+- MetaMask or compatible wallet
+- OpenRouter API key
+
+### One env var
+
+```bash
+OPENROUTER_API_KEY=sk-or-v1-your-key
+```
+
+That's it. Base URL, payee address, and model IDs are all hardcoded in `config.ts`. Override via `SHADOWNPM_*` vars if needed.
 
 ### Run locally
 
 ```bash
-# 1. Start the engine
+# Start the engine
 cd engine
-cp .env.template .env    # Edit: set SHADOWNPM_PAYEE_ADDRESS, LLM keys
 npm install
-npx tsx src/index.ts     # Starts on :8000
+OPENROUTER_API_KEY=sk-or-v1-... npx tsx src/index.ts   # Starts on :8000
 
-# 2. Start the frontend
+# Start the frontend (separate terminal)
 cd frontend
 npm install
-npm run dev              # Starts on :3000, proxies /api/* to engine
+npm run dev                                              # Starts on :3000
 ```
 
-### Environment variables (engine)
+## Deploy to Railway
 
-```bash
-# Required
-SHADOWNPM_LLM_BACKEND=openai_compatible
-SHADOWNPM_LLM_BASE_URL=https://api.featherless.ai/v1
-SHADOWNPM_LLM_API_KEY=your_featherless_key
-
-# x402 payment (omit for free mode)
-SHADOWNPM_PAYEE_ADDRESS=0xYourWalletAddress
-SHADOWNPM_FACILITATOR_URL=https://x402.org/facilitator
-SHADOWNPM_AUDIT_PRICE_USD=$0.001
-
-# Per-phase LLM models
-SHADOWNPM_TRIAGE_MODEL=Qwen/Qwen2.5-Coder-32B-Instruct
-SHADOWNPM_INVESTIGATION_MODEL=Qwen/Qwen2.5-Coder-32B-Instruct
-SHADOWNPM_TEST_GEN_MODEL=Qwen/Qwen2.5-Coder-32B-Instruct
+```
+OPENROUTER_API_KEY=sk-or-v1-your-key
 ```
 
-### Run the 50+ transaction demo
-
-```bash
-# Fund a wallet with testnet USDC at https://faucet.circle.com/
-SHADOWNPM_PRIVATE_KEY=0x... npx tsx scripts/demo-50tx.ts
-```
+Paste that one env var in Railway. No Docker needed — the sandbox runs via native `child_process`.
 
 ## Tech Stack
 
@@ -158,18 +134,16 @@ SHADOWNPM_PRIVATE_KEY=0x... npx tsx scripts/demo-50tx.ts
 |-----------|------------|
 | Frontend | React + Vite + Tailwind CSS + Zustand + CodeMirror 6 |
 | Engine | TypeScript + Hono + Vercel AI SDK |
-| Payment | x402 nanopayments — $0.001 USDC on Arc testnet |
-| LLM | Featherless AI — Qwen 2.5 Coder 32B (OpenAI-compatible) |
-| Sandbox | Docker (node:22-slim, isolated network) |
-| Settlement | Arc testnet (USDC nanopayments via x402) |
+| Payment | $0.001 USDC on Arc testnet (verified on-chain) |
+| LLM | OpenRouter — Claude 3.5 Haiku / Claude Sonnet 4 |
+| Sandbox | Native child_process with memory/timeout limits |
+| Settlement | Arc testnet |
 
-## Hackathon
+## Project Structure
 
-**Track**: Per-API Monetization Engine
-
-**Key innovation**: Every API call (audit) is individually priced and paid for via x402. No subscriptions, no API keys, no billing infrastructure. The protocol itself handles authentication, authorization, and payment in a single HTTP request cycle.
-
-**Circle products used**:
-- x402 Nanopayments (USDC micropayments on Arc)
-- Arc testnet (stablecoin-native settlement)
-- USDC (EIP-3009 transferWithAuthorization)
+| Directory | Description |
+|-----------|-------------|
+| `frontend/` | React + Vite dashboard — live audit streaming, payment UI |
+| `engine/` | TypeScript audit pipeline — 6-phase AI security analysis |
+| `scripts/` | Demo scripts |
+| `sandbox/` | Exploit harness (Vitest, no Docker needed) |
