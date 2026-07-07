@@ -202,23 +202,22 @@ export const useAuditStore = create<AuditState>((set, get) => ({
     }
 
     // Step 3: Verify payment on engine
-      set({ paymentStatus: "verifying", paymentTxHash: txHash });
-      try {
-        const verifyRes = await fetch(`${API_BASE}/verify-payment`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ txHash }),
-        });
-        const verifyBody = await verifyRes.json();
-        if (!verifyBody.verified) {
-          set({ isRunning: false, paymentStatus: null, error: verifyBody.error || "Payment verification failed" });
-          return;
-        }
-        paymentToken = verifyBody.token;
-      } catch {
-        set({ isRunning: false, paymentStatus: null, error: "Payment verification failed" });
+    set({ paymentStatus: "verifying", paymentTxHash: txHash });
+    try {
+      const verifyRes = await fetch(`${API_BASE}/verify-payment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ txHash }),
+      });
+      const verifyBody = await verifyRes.json();
+      if (!verifyBody.verified) {
+        set({ isRunning: false, paymentStatus: null, error: verifyBody.error || "Payment verification failed" });
         return;
       }
+      paymentToken = verifyBody.token;
+    } catch {
+      set({ isRunning: false, paymentStatus: null, error: "Payment verification failed" });
+      return;
     }
 
     set({ paymentStatus: null });
